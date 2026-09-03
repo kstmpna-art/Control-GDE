@@ -1,18 +1,21 @@
 var API_URL = 'https://script.google.com/macros/s/AKfycbyNvz-SYl9sS2FvDH7g4dPcEWo_wGyieqJLyFD8mkqap8wf-JrsIGpHSCIcYnt_-GbB/exec';
 var registros = [];
+var cargando = false;
 var state = { view: 'list', tab: 'panel', selectedId: null, filterText: '', filterEstado: 'todos', filterFechaDesde: '', filterFechaHasta: '', page: 1, perPage: 20 };
 
 function showToast(msg) {
   var t = document.getElementById('toast');
   t.textContent = msg;
   t.style.display = 'block';
-  setTimeout(function () { t.style.display = 'none'; }, 2800);
+  clearTimeout(t._timeout);
+  t._timeout = setTimeout(function () { t.style.display = 'none'; }, 2800);
 }
 
 async function apiGet(action, params) {
   var url = API_URL + '?action=' + action;
   if (params) Object.keys(params).forEach(function (k) { url += '&' + k + '=' + encodeURIComponent(params[k]); });
   var res = await fetch(url);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
   return res.json();
 }
 
@@ -23,6 +26,7 @@ async function apiPost(action, data) {
     redirect: 'follow',
     body: JSON.stringify(body)
   });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
   return res.json();
 }
 
@@ -66,11 +70,19 @@ document.getElementById('logout-btn').addEventListener('click', function () {
 });
 
 function cargarRegistros() {
-  apiGet('getRegistros').then(function (data) {
-    registros = data;
-    render();
+  if (cargando) return Promise.resolve();
+  cargando = true;
+  return apiGet('getRegistros').then(function (data) {
+    if (Array.isArray(data)) {
+      registros = data;
+      render();
+    } else {
+      showToast('Error: respuesta inesperada del servidor');
+    }
   }).catch(function (err) {
-    document.getElementById('view-root').innerHTML = '<div class="empty-state">Error al cargar: ' + err.message + '</div>';
+    showToast('Error al cargar datos: ' + err.message);
+  }).finally(function () {
+    cargando = false;
   });
 }
 
@@ -415,7 +427,7 @@ function bindEvents() {
           apiPost('marcarRespuestaDestinatario', { destinatarioId: destId, archivo: archivoData }).then(function () {
             showToast('Respuesta registrada');
             cargarRegistros();
-          });
+          }).catch(function (e) { showToast('Error: ' + e.message); });
         });
       });
     });
@@ -424,32 +436,35 @@ function bindEvents() {
       var nuevo = e.target.value;
       if (nuevo !== (n.observaciones || '')) {
         n.observaciones = nuevo;
-        apiPost('actualizarRegistro', { id: n.id, cambios: { observaciones: nuevo } });
+        apiPost('actualizarRegistro', { id: n.id, cambios: { observaciones: nuevo } }).catch(function (e) { showToast('Error: ' + e.message); });
       }
     });
     document.getElementById('det-direccion').addEventListener('change', function (e) {
       var n = registros.find(function (x) { return x.id === state.selectedId; });
       var nueva = e.target.value;
       n.direccion = nueva;
-      apiPost('actualizarRegistro', { id: n.id, cambios: { Direccion: nueva } });
-      showToast('Dirección actualizada');
-      render();
+      apiPost('actualizarRegistro', { id: n.id, cambios: { Direccion: nueva } }).then(function () {
+        showToast('Dirección actualizada');
+        render();
+      }).catch(function (e) { showToast('Error: ' + e.message); });
     });
     document.getElementById('det-estado').addEventListener('change', function (e) {
       var n = registros.find(function (x) { return x.id === state.selectedId; });
       var nuevoEstado = e.target.value;
       n.estado = nuevoEstado;
-      apiPost('actualizarRegistro', { id: n.id, cambios: { Estado: nuevoEstado } });
-      showToast('Estado actualizado');
-      render();
+      apiPost('actualizarRegistro', { id: n.id, cambios: { Estado: nuevoEstado } }).then(function () {
+        showToast('Estado actualizado');
+        render();
+      }).catch(function (e) { showToast('Error: ' + e.message); });
     });
     document.getElementById('det-numero').addEventListener('blur', function (e) {
       var n = registros.find(function (x) { return x.id === state.selectedId; });
       var nuevo = e.target.value.trim();
       if (nuevo !== n.numero) {
         n.numero = nuevo;
-        apiPost('actualizarRegistro', { id: n.id, cambios: { Numero: nuevo } });
-        showToast('Número actualizado');
+        apiPost('actualizarRegistro', { id: n.id, cambios: { Numero: nuevo } }).then(function () {
+          showToast('Número actualizado');
+        }).catch(function (e) { showToast('Error: ' + e.message); });
       }
     });
     document.getElementById('det-referencia').addEventListener('blur', function (e) {
@@ -457,33 +472,39 @@ function bindEvents() {
       var nueva = e.target.value.trim();
       if (nueva !== n.referencia) {
         n.referencia = nueva;
-        apiPost('actualizarRegistro', { id: n.id, cambios: { Referencia: nueva } });
-        showToast('Referencia actualizada');
+        apiPost('actualizarRegistro', { id: n.id, cambios: { Referencia: nueva } }).then(function () {
+          showToast('Referencia actualizada');
+        }).catch(function (e) { showToast('Error: ' + e.message); });
       }
     });
     document.getElementById('det-fecha').addEventListener('change', function (e) {
       var n = registros.find(function (x) { return x.id === state.selectedId; });
       var nueva = isoToDmy(e.target.value);
       n.fecha = nueva;
-      apiPost('actualizarRegistro', { id: n.id, cambios: { fecha: nueva } });
-      showToast('Fecha actualizada');
+      apiPost('actualizarRegistro', { id: n.id, cambios: { fecha: nueva } }).then(function () {
+        showToast('Fecha actualizada');
+      }).catch(function (e) { showToast('Error: ' + e.message); });
     });
     document.getElementById('det-fechalimite').addEventListener('change', async function (e) {
       var n = registros.find(function (x) { return x.id === state.selectedId; });
       var nueva = isoToDmy(e.target.value);
       n.fechaLimite = nueva;
-      await apiPost('actualizarRegistro', { id: n.id, cambios: { fechaLimite: nueva } });
-      showToast('Fecha de vencimiento actualizada');
-      await cargarRegistros();
+      try {
+        await apiPost('actualizarRegistro', { id: n.id, cambios: { fechaLimite: nueva } });
+        showToast('Fecha de vencimiento actualizada');
+        await cargarRegistros();
+      } catch (e) { showToast('Error: ' + e.message); }
     });
     document.getElementById('delete-btn').addEventListener('click', async function () {
       var n = registros.find(function (x) { return x.id === state.selectedId; });
       if (!confirm('¿Eliminar el registro ' + n.numero + '? Esta acción no se puede deshacer.')) return;
-      showToast('Eliminando registro...');
-      await apiPost('eliminarRegistro', { id: n.id });
-      showToast('Registro eliminado');
-      state.view = 'list';
-      await cargarRegistros();
+      try {
+        showToast('Eliminando registro...');
+        await apiPost('eliminarRegistro', { id: n.id });
+        showToast('Registro eliminado');
+        state.view = 'list';
+        await cargarRegistros();
+      } catch (e) { showToast('Error: ' + e.message); }
     });
     document.getElementById('add-dest-detail-btn').addEventListener('click', function () {
       document.getElementById('add-dest-form').style.display = 'block';
@@ -501,46 +522,51 @@ function bindEvents() {
       var dep = document.getElementById('new-dest-dep').value.trim();
       if (!nombre) { showToast('Ingresá el nombre'); return; }
       var n = registros.find(function (x) { return x.id === state.selectedId; });
-      showToast('Agregando destinatario...');
-      await apiPost('agregarDestinatario', { notaId: n.id, nombre: nombre, dependencia: dep });
-      showToast('Destinatario agregado');
-      await cargarRegistros();
-      state.view = 'detail';
-      render();
+      try {
+        showToast('Agregando destinatario...');
+        await apiPost('agregarDestinatario', { notaId: n.id, nombre: nombre, dependencia: dep });
+        showToast('Destinatario agregado');
+        await cargarRegistros();
+        state.view = 'detail';
+        render();
+      } catch (e) { showToast('Error: ' + e.message); }
     });
     document.querySelectorAll('.delete-dest-btn').forEach(function (btn) {
       btn.addEventListener('click', async function (e) {
         e.stopPropagation();
         if (!confirm('¿Eliminar este destinatario?')) return;
         var destId = btn.getAttribute('data-id');
-        showToast('Eliminando destinatario...');
-        await apiPost('eliminarDestinatario', { destinatarioId: destId });
-        showToast('Destinatario eliminado');
-        await cargarRegistros();
-        state.view = 'detail';
-        render();
+        try {
+          showToast('Eliminando destinatario...');
+          await apiPost('eliminarDestinatario', { destinatarioId: destId });
+          showToast('Destinatario eliminado');
+          await cargarRegistros();
+          state.view = 'detail';
+          render();
+        } catch (e) { showToast('Error: ' + e.message); }
       });
     });
     document.querySelectorAll('.dest-nombre-input').forEach(function (input) {
       input.addEventListener('blur', function () {
         var destId = input.getAttribute('data-id');
         var nuevo = input.value.trim();
-        if (nuevo) apiPost('actualizarDestinatario', { destinatarioId: destId, campo: 'Nombre', valor: nuevo });
+        if (nuevo) apiPost('actualizarDestinatario', { destinatarioId: destId, campo: 'Nombre', valor: nuevo }).catch(function (e) { showToast('Error: ' + e.message); });
       });
     });
     document.querySelectorAll('.dest-dep-input').forEach(function (input) {
       input.addEventListener('blur', function () {
         var destId = input.getAttribute('data-id');
         var nuevo = input.value.trim();
-        apiPost('actualizarDestinatario', { destinatarioId: destId, campo: 'Dependencia', valor: nuevo });
+        apiPost('actualizarDestinatario', { destinatarioId: destId, campo: 'Dependencia', valor: nuevo }).catch(function (e) { showToast('Error: ' + e.message); });
       });
     });
     document.querySelectorAll('.dest-fecha-resp-input').forEach(function (input) {
       input.addEventListener('change', function () {
         var destId = input.getAttribute('data-id');
         var nueva = isoToDmy(input.value);
-        apiPost('actualizarDestinatario', { destinatarioId: destId, campo: 'FechaRespuesta', valor: nueva });
-        showToast('Fecha de respuesta actualizada');
+        apiPost('actualizarDestinatario', { destinatarioId: destId, campo: 'FechaRespuesta', valor: nueva }).then(function () {
+          showToast('Fecha de respuesta actualizada');
+        }).catch(function (e) { showToast('Error: ' + e.message); });
       });
     });
   }
@@ -562,9 +588,10 @@ function bindTableClicks() {
       var nueva = sel.value;
       var n = registros.find(function (x) { return x.id === id; });
       if (n) n.direccion = nueva;
-      apiPost('actualizarRegistro', { id: id, cambios: { Direccion: nueva } });
-      showToast('Dirección actualizada');
-      render();
+      apiPost('actualizarRegistro', { id: id, cambios: { Direccion: nueva } }).then(function () {
+        showToast('Dirección actualizada');
+        render();
+      }).catch(function (e) { showToast('Error: ' + e.message); });
     });
   });
   document.querySelectorAll('.estado-rapido').forEach(function (sel) {
@@ -574,9 +601,10 @@ function bindTableClicks() {
       var nuevoEstado = sel.value;
       var n = registros.find(function (x) { return x.id === id; });
       if (n) n.estado = nuevoEstado;
-      apiPost('actualizarRegistro', { id: id, cambios: { Estado: nuevoEstado } });
-      showToast('Estado actualizado');
-      render();
+      apiPost('actualizarRegistro', { id: id, cambios: { Estado: nuevoEstado } }).then(function () {
+        showToast('Estado actualizado');
+        render();
+      }).catch(function (e) { showToast('Error: ' + e.message); });
     });
   });
 }
@@ -584,26 +612,43 @@ function bindTableClicks() {
 async function handleQuickFiles(fileList) {
   var files = Array.prototype.slice.call(fileList);
   var total = files.length;
+  var procesados = 0;
+  var errores = 0;
   for (var i = 0; i < total; i++) {
     var file = files[i];
     showToast('Procesando ' + (i + 1) + ' de ' + total + ': ' + file.name);
-    await new Promise(function (resolve) {
-      fileToBase64(file, async function (archivoData) {
-        var res = await apiPost('crearRegistroDesdeArchivo', { archivo: archivoData, direccion: 'Entrada' });
-        if (res.duplicado) {
-          if (confirm('Ya existe un registro con el número ' + res.numero + '. ¿Desea reemplazarlo?')) {
-            await apiPost('eliminarRegistroPorNumero', { numero: res.numero });
-            showToast('Registro anterior eliminado, creando nuevo...');
-            await apiPost('crearRegistroDesdeArchivo', { archivo: archivoData, direccion: 'Entrada' });
-          } else {
-            showToast('Se omitió: ' + res.numero);
+    try {
+      await new Promise(function (resolve, reject) {
+        fileToBase64(file, async function (archivoData) {
+          try {
+            var res = await apiPost('crearRegistroDesdeArchivo', { archivo: archivoData, direccion: 'Entrada' });
+            if (res.duplicado) {
+              if (confirm('Ya existe un registro con el número ' + res.numero + '. ¿Desea reemplazarlo?')) {
+                await apiPost('eliminarRegistroPorNumero', { numero: res.numero });
+                showToast('Registro anterior eliminado, creando nuevo...');
+                await apiPost('crearRegistroDesdeArchivo', { archivo: archivoData, direccion: 'Entrada' });
+              } else {
+                showToast('Se omitió: ' + res.numero);
+              }
+            }
+            procesados++;
+            resolve();
+          } catch (e) {
+            errores++;
+            showToast('Error con ' + file.name + ': ' + e.message);
+            resolve();
           }
-        }
-        resolve();
+        });
       });
-    });
+    } catch (e) {
+      errores++;
+    }
   }
-  showToast(total + ' archivos procesados.');
+  if (errores > 0) {
+    showToast(procesados + ' ok, ' + errores + ' con error');
+  } else {
+    showToast(total + ' archivos procesados.');
+  }
   await cargarRegistros();
 }
 
@@ -673,14 +718,14 @@ document.getElementById('save-modal-btn').addEventListener('click', async functi
           apiPost('eliminarRegistroPorNumero', { numero: numero }).then(function () {
             showToast('Registro anterior eliminado, creando nuevo...');
             guardarLayout(archData);
-          });
+          }).catch(function (e) { showToast('Error: ' + e.message); });
         } else {
           showToast('Se canceló el guardado');
         }
       } else {
         guardarLayout(archData);
       }
-    });
+    }).catch(function (e) { showToast('Error: ' + e.message); });
   }
   async function guardarLayout(archData) {
     var data = {
@@ -694,11 +739,15 @@ document.getElementById('save-modal-btn').addEventListener('click', async functi
       destinatarios: destinatarios,
       archivo: archData
     };
-    showToast('Guardando registro...');
-    await apiPost('crearRegistro', { data: data });
-    showToast('Registro guardado');
-    closeModal();
-    await cargarRegistros();
+    try {
+      showToast('Guardando registro...');
+      await apiPost('crearRegistro', { data: data });
+      showToast('Registro guardado');
+      closeModal();
+      await cargarRegistros();
+    } catch (e) {
+      showToast('Error al guardar: ' + e.message);
+    }
   }
   if (fileInput.files.length) {
     fileToBase64(fileInput.files[0], procesarGuardado);
