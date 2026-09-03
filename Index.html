@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/estilo.css">
+</head>
+<body>
+
+<header>
+  <div style="display:flex; align-items:center;">
+    <div class="brand">
+      <div class="brand-mark">CO</div>
+      <div>
+        <div class="brand-title">Control de Oficios, Notas e Informes</div>
+        <div class="brand-sub">Sistema de seguimiento documental</div>
+      </div>
+    </div>
+    <nav class="tabs">
+      <span class="tab-link active" data-tab="panel">Panel</span>
+      <span class="tab-link" data-tab="registros">Registros</span>
+    </nav>
+  </div>
+  <div class="user-box">
+    <span class="user-email" id="user-email">Cargando usuario...</span>
+    <button class="btn-logout" id="logout-btn">Cerrar sesión</button>
+  </div>
+</header>
+
+<main>
+  <div id="view-root"></div>
+</main>
+
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <h3>Nuevo registro</h3>
+    <div class="field">
+      <label>Número</label>
+      <input type="text" id="f-numero" placeholder="Ej. 045/26">
+    </div>
+    <div class="field">
+      <label>Referencia / asunto</label>
+      <input type="text" id="f-referencia" placeholder="Asunto del documento">
+    </div>
+    <div class="field">
+      <label>Entrada o salida</label>
+      <select id="f-direccion">
+        <option value="Entrada">Entrada</option>
+        <option value="Salida">Salida</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Fecha</label>
+      <input type="date" id="f-fecha">
+    </div>
+    <div class="field">
+      <label>Estado</label>
+      <select id="f-estado">
+        <option value="pendiente">Pendiente</option>
+        <option value="espera">Espera de respuesta</option>
+        <option value="tomado">Tomado conocimiento</option>
+        <option value="cumplido">Cumplido</option>
+      </select>
+    </div>
+    <div class="field" id="f-fechalimite-wrap" style="display:none;">
+      <label>Fecha límite de respuesta</label>
+      <input type="date" id="f-fechalimite">
+    </div>
+    <div class="field">
+      <label>Destinatarios (opcional, uno por línea con nombre y dependencia)</label>
+      <div id="dest-inputs"></div>
+      <button type="button" class="btn-secondary" id="add-dest-btn">+ Agregar destinatario</button>
+    </div>
+    <div class="field">
+      <label>Archivo</label>
+      <input type="file" id="f-archivo">
+    </div>
+    <div class="field">
+      <label>Observaciones</label>
+      <textarea id="f-obs" placeholder="Observaciones..."></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="cancel-modal-btn">Cancelar</button>
+      <button class="btn-primary" id="save-modal-btn">Guardar registro</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="js/app.js"></script>
+</body>
+</html>
