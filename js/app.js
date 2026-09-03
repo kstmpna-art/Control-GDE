@@ -1,4 +1,4 @@
-var API_URL = 'https://script.google.com/macros/s/AKfycbyYgkWqdDrwp8YTrq7N0rv9tfkxv980G84H6MENA1bTbAR2QydRM7Myl9v170xe2ESW/exec';
+var API_URL = 'https://script.google.com/macros/s/AKfycbwwD8NBcCnj2F_-9RYVzRPZEl4cfYqmNeIkVH-UB2aCpcs1sYwssG5Ko5184Q7Zny2Y/exec';
 var registros = [];
 var state = { view: 'list', tab: 'panel', selectedId: null, filterText: '', filterEstado: 'todos', filterFechaDesde: '', filterFechaHasta: '', page: 1, perPage: 20 };
 
@@ -122,6 +122,8 @@ function listHtml() {
   if (state.tab === 'registros') {
     html += '<input type="date" id="fecha-desde" value="' + state.filterFechaDesde + '" style="width:140px;" title="Fecha desde">';
     html += '<input type="date" id="fecha-hasta" value="' + state.filterFechaHasta + '" style="width:140px;" title="Fecha hasta">';
+    html += '<button class="btn-primary" id="btn-buscar-fecha" style="padding:0 14px;">Buscar</button>';
+    html += '<button class="btn-secondary" id="btn-limpiar-fecha" style="padding:0 14px;">Limpiar</button>';
   }
   html += '<button class="btn-primary" id="new-btn">+ Nuevo registro</button>';
   html += '</div>';
@@ -134,8 +136,15 @@ function listHtml() {
 
 function kpiCard(label, value, estado) {
   var isActive = state.filterEstado === estado;
-  var border = isActive ? 'border:2px solid var(--accent);' : '';
-  return '<div class="kpi-card" data-estado="' + estado + '" style="cursor:pointer;' + border + '"><p class="kpi-label">' + label + '</p><p class="kpi-value">' + value + '</p></div>';
+  var colors = {
+    pendiente: { bg: 'var(--amber-bg)', border: 'var(--amber)', icon: '&#9888;' },
+    espera: { bg: 'var(--coral-bg)', border: 'var(--coral)', icon: '&#8987;' },
+    cumplido: { bg: 'var(--green-bg)', border: 'var(--green)', icon: '&#10003;' },
+    tomado: { bg: 'var(--indigo-bg)', border: 'var(--indigo)', icon: '&#128203;' }
+  };
+  var c = colors[estado] || { bg: 'var(--surface)', border: 'var(--border)', icon: '' };
+  var activeStyle = isActive ? 'border:2px solid ' + c.border + ';' : 'border:2px solid transparent;';
+  return '<div class="kpi-card" data-estado="' + estado + '" style="cursor:pointer;' + activeStyle + ' background:' + c.bg + ';"><p class="kpi-label">' + c.icon + ' ' + label + '</p><p class="kpi-value" style="color:' + c.border + ';">' + value + '</p></div>';
 }
 
 function tableHtml() {
@@ -240,7 +249,7 @@ function detailHtml() {
   html += '<button class="btn-secondary" id="cancel-dest-btn" style="padding:6px 12px;">Cancelar</button>';
   html += '</div></div>';
   html += '<button class="btn-secondary" id="add-dest-detail-btn" style="margin-top:10px;">+ Agregar destinatario</button>';
-  html += '<div class="card"><label style="font-size:12.5px; color:var(--ink-soft); font-weight:500; display:block; margin-bottom:6px;">Observaciones generales</label><textarea id="obs-input">' + (n.observaciones || '') + '</textarea><div style="margin-top:8px; display:flex; gap:8px; align-items:center;"><button class="btn-primary" id="save-obs-btn" style="padding:6px 14px; font-size:12.5px;">Guardar</button><span id="obs-status" style="font-size:12px; color:var(--ink-faint);"></span></div></div>';
+  html += '<div class="card"><label style="font-size:12.5px; color:var(--ink-soft); font-weight:500; display:block; margin-bottom:6px;">Observaciones generales (se guarda automáticamente)</label><textarea id="obs-input">' + (n.observaciones || '') + '</textarea></div>';
   return html;
 }
 
@@ -333,14 +342,26 @@ function bindEvents() {
     if (fd) {
       fd.addEventListener('change', function () {
         state.filterFechaDesde = fd.value;
-        state.page = 1;
-        render();
       });
     }
     var fh = document.getElementById('fecha-hasta');
     if (fh) {
       fh.addEventListener('change', function () {
         state.filterFechaHasta = fh.value;
+      });
+    }
+    var btnBuscar = document.getElementById('btn-buscar-fecha');
+    if (btnBuscar) {
+      btnBuscar.addEventListener('click', function () {
+        state.page = 1;
+        render();
+      });
+    }
+    var btnLimpiar = document.getElementById('btn-limpiar-fecha');
+    if (btnLimpiar) {
+      btnLimpiar.addEventListener('click', function () {
+        state.filterFechaDesde = '';
+        state.filterFechaHasta = '';
         state.page = 1;
         render();
       });
@@ -369,16 +390,13 @@ function bindEvents() {
         });
       });
     });
-    document.getElementById('save-obs-btn').addEventListener('click', async function () {
+    document.getElementById('obs-input').addEventListener('blur', function (e) {
       var n = registros.find(function (x) { return x.id === state.selectedId; });
-      var status = document.getElementById('obs-status');
-      var btn = document.getElementById('save-obs-btn');
-      status.textContent = 'Guardando...';
-      btn.disabled = true;
-      await apiPost('actualizarRegistro', { id: n.id, cambios: { observaciones: document.getElementById('obs-input').value } });
-      status.textContent = 'Guardado';
-      btn.disabled = false;
-      setTimeout(function () { status.textContent = ''; }, 2000);
+      var nuevo = e.target.value;
+      if (nuevo !== (n.observaciones || '')) {
+        n.observaciones = nuevo;
+        apiPost('actualizarRegistro', { id: n.id, cambios: { observaciones: nuevo } });
+      }
     });
     document.getElementById('det-direccion').addEventListener('change', function (e) {
       var n = registros.find(function (x) { return x.id === state.selectedId; });
