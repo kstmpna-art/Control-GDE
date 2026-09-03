@@ -354,12 +354,15 @@ function bindEvents() {
     var searchDebounce = null;
     var search = document.getElementById('search-input');
     search.addEventListener('input', function () {
+      var cursorPos = search.selectionStart;
       clearTimeout(searchDebounce);
       searchDebounce = setTimeout(function () {
         state.filterText = search.value;
         state.page = 1;
         render();
-        document.getElementById('search-input').focus();
+        var newSearch = document.getElementById('search-input');
+        newSearch.focus();
+        newSearch.setSelectionRange(cursorPos, cursorPos);
       }, 250);
     });
     document.querySelectorAll('.kpi-card').forEach(function (card) {
