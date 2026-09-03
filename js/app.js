@@ -1,7 +1,7 @@
 var API_URL = 'https://script.google.com/macros/s/AKfycbyNvz-SYl9sS2FvDH7g4dPcEWo_wGyieqJLyFD8mkqap8wf-JrsIGpHSCIcYnt_-GbB/exec';
 var registros = [];
 var cargando = false;
-var state = { view: 'list', tab: 'panel', selectedId: null, filterText: '', filterEstado: 'todos', filterFechaDesde: '', filterFechaHasta: '', page: 1, perPage: 20 };
+var state = { view: 'list', tab: 'panel', selectedId: null, filterText: '', filterEstado: 'todos', filterFechaDesde: '', filterFechaHasta: '', page: 1, perPage: 20, sortColumn: 'fecha', sortDirection: 'desc' };
 
 function showToast(msg) {
   var t = document.getElementById('toast');
@@ -93,9 +93,15 @@ function estadoInfo(e) {
   return { cls: 'badge-tomado', label: 'Tom. conoc.' };
 }
 
+function parseFecha(dmy) {
+  if (!dmy) return null;
+  var parts = dmy.split('/');
+  return new Date(parts[2], parts[1] - 1, parts[0]);
+}
+
 function filteredRegistros() {
   var t = state.filterText.toLowerCase();
-  return registros.filter(function (n) {
+  var filtered = registros.filter(function (n) {
     var matchText = !t || (n.numero || '').toLowerCase().indexOf(t) > -1 ||
       (n.referencia || '').toLowerCase().indexOf(t) > -1 ||
       (n.observaciones || '').toLowerCase().indexOf(t) > -1;
@@ -112,8 +118,27 @@ function filteredRegistros() {
       matchFecha = matchFecha && fechaReg <= state.filterFechaHasta;
     }
     return matchText && matchEstado && matchFecha;
-    return matchText && matchEstado;
   });
+
+  filtered.sort(function (a, b) {
+    var valA, valB;
+    if (state.sortColumn === 'fecha') {
+      valA = parseFecha(a.fecha);
+      valB = parseFecha(b.fecha);
+    } else if (state.sortColumn === 'fechaLimite') {
+      valA = parseFecha(a.fechaLimite);
+      valB = parseFecha(b.fechaLimite);
+    } else {
+      return 0;
+    }
+    if (!valA && !valB) return 0;
+    if (!valA) return state.sortDirection === 'asc' ? -1 : 1;
+    if (!valB) return state.sortDirection === 'asc' ? 1 : -1;
+    var cmp = valA - valB;
+    return state.sortDirection === 'asc' ? cmp : -cmp;
+  });
+
+  return filtered;
 }
 
 function render() {
@@ -188,6 +213,11 @@ function kpiCard(label, value, estado) {
   return '<div class="kpi-card" data-estado="' + estado + '" style="cursor:pointer;' + activeStyle + ' background:' + c.bg + ';"><p class="kpi-label">' + c.icon + ' ' + label + '</p><p class="kpi-value" style="color:' + c.border + ';">' + value + '</p></div>';
 }
 
+function getSortIcon(column) {
+  if (state.sortColumn !== column) return '';
+  return state.sortDirection === 'asc' ? ' &#9650;' : ' &#9660;';
+}
+
 function tableHtml() {
   var allRows = filteredRegistros();
   var totalRows = allRows.length;
@@ -196,7 +226,15 @@ function tableHtml() {
   var start = (state.page - 1) * state.perPage;
   var rows = allRows.slice(start, start + state.perPage);
 
-  var html = '<div class="table-wrap"><table><thead><tr><th>Nº ref.</th><th>Fecha</th><th>Entrada/Salida</th><th>Asunto</th><th>Estado</th><th>Vence</th><th>Observaciones</th></tr></thead><tbody>';
+  var html = '<div class="table-wrap"><table><thead><tr>' +
+    '<th>Nº ref.</th>' +
+    '<th class="sortable" data-column="fecha">Fecha' + getSortIcon('fecha') + '</th>' +
+    '<th>Entrada/Salida</th>' +
+    '<th>Asunto</th>' +
+    '<th>Estado</th>' +
+    '<th class="sortable" data-column="fechaLimite">Vence' + getSortIcon('fechaLimite') + '</th>' +
+    '<th>Observaciones</th>' +
+    '</tr></thead><tbody>';
   if (rows.length === 0) {
     html += '<tr><td colspan="7" class="empty-state">No hay registros para este filtro.</td></tr>';
   }
@@ -364,6 +402,19 @@ function bindEvents() {
         render();
       });
     }
+    document.querySelectorAll('th.sortable').forEach(function (th) {
+      th.addEventListener('click', function () {
+        var col = th.getAttribute('data-column');
+        if (state.sortColumn === col) {
+          state.sortDirection = state.sortDirection === 'asc' ? 'desc' : 'asc';
+        } else {
+          state.sortColumn = col;
+          state.sortDirection = 'desc';
+        }
+        state.page = 1;
+        render();
+      });
+    });
     bindTableClicks();
     document.querySelectorAll('.page-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
