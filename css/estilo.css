@@ -199,3 +199,11 @@
       padding: 12px 18px; border-radius: 9px; font-size: 13px; box-shadow: var(--shadow);
       display: none; z-index: 60;
     }
+
+    /* Bootstrap overrides */
+    .btn-primary { background: var(--accent) !important; color: #fff !important; border: none !important; border-radius: 8px !important; font-weight: 600 !important; }
+    .btn-primary:hover { background: var(--accent-dark) !important; }
+    .btn-secondary { background: var(--surface) !important; color: var(--ink) !important; border: 1px solid var(--border) !important; border-radius: 8px !important; }
+    .btn-secondary:hover { border-color: var(--accent) !important; color: var(--accent-dark) !important; }
+    .btn-danger { background: var(--coral-bg) !important; color: var(--coral) !important; border: 1px solid transparent !important; border-radius: 8px !important; }
+    .btn-danger:hover { background: var(--coral) !important; color: #fff !important; }
