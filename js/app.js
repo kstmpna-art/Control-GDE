@@ -351,11 +351,16 @@ function bindEvents() {
         render();
       });
     });
+    var searchDebounce = null;
     var search = document.getElementById('search-input');
     search.addEventListener('input', function () {
-      state.filterText = search.value;
-      state.page = 1;
-      render();
+      clearTimeout(searchDebounce);
+      searchDebounce = setTimeout(function () {
+        state.filterText = search.value;
+        state.page = 1;
+        render();
+        document.getElementById('search-input').focus();
+      }, 250);
     });
     document.querySelectorAll('.kpi-card').forEach(function (card) {
       card.addEventListener('click', function () {
