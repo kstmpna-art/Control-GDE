@@ -1,4 +1,4 @@
-var API_URL = 'https://script.google.com/macros/s/AKfycbyDjwN1oYZbLZkdUgDpjkDG67pdliGhpTosgtd-4HvYgy6nImRww1wXYC8kuR4BgrdU/exec';
+var API_URL = 'https://script.google.com/macros/s/AKfycbyNvz-SYl9sS2FvDH7g4dPcEWo_wGyieqJLyFD8mkqap8wf-JrsIGpHSCIcYnt_-GbB/exec';
 var registros = [];
 var state = { view: 'list', tab: 'panel', selectedId: null, filterText: '', filterEstado: 'todos', filterFechaDesde: '', filterFechaHasta: '', page: 1, perPage: 20 };
 
@@ -155,7 +155,7 @@ function tableHtml() {
   var start = (state.page - 1) * state.perPage;
   var rows = allRows.slice(start, start + state.perPage);
 
-  var html = '<table><thead><tr><th>Nº ref.</th><th>Fecha</th><th>Entrada/Salida</th><th>Asunto</th><th>Estado</th><th>Vence</th><th>Observaciones</th></tr></thead><tbody>';
+  var html = '<div class="table-wrap"><table><thead><tr><th>Nº ref.</th><th>Fecha</th><th>Entrada/Salida</th><th>Asunto</th><th>Estado</th><th>Vence</th><th>Observaciones</th></tr></thead><tbody>';
   if (rows.length === 0) {
     html += '<tr><td colspan="7" class="empty-state">No hay registros para este filtro.</td></tr>';
   }
@@ -176,7 +176,7 @@ function tableHtml() {
     html += '<td style="color:var(--ink-soft);">' + (n.observaciones || '—') + '</td>';
     html += '</tr>';
   });
-  html += '</tbody></table>';
+  html += '</tbody></table></div>';
 
   if (totalRows > 0) {
     html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px; font-size:13px; color:var(--ink-soft);">';
