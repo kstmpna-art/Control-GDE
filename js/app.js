@@ -1,4 +1,4 @@
-var API_URL = 'https://script.google.com/macros/s/AKfycbwwD8NBcCnj2F_-9RYVzRPZEl4cfYqmNeIkVH-UB2aCpcs1sYwssG5Ko5184Q7Zny2Y/exec';
+var API_URL = 'https://script.google.com/macros/s/AKfycbyvAekCAiFVPmeEMiBhUPXGv7HBsN_LqfEhDjvXpQpfFxj44SrlamDAkIUoo9czwN9w/exec';
 var registros = [];
 var state = { view: 'list', tab: 'panel', selectedId: null, filterText: '', filterEstado: 'todos', filterFechaDesde: '', filterFechaHasta: '', page: 1, perPage: 20 };
 
