@@ -27,8 +27,37 @@ async function apiPost(action, data) {
 }
 
 function cargarUsuario() {
-  apiGet('getUsuarioActual').then(function (email) {
-    document.getElementById('user-email').textContent = email;
+  var nombre = localStorage.getItem('usuario_nombre');
+  if (nombre) {
+    document.getElementById('user-email').textContent = nombre;
+    return;
+  }
+  mostrarSelectorUsuario();
+}
+
+function mostrarSelectorUsuario() {
+  var overlay = document.createElement('div');
+  overlay.id = 'user-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(16,36,62,0.5);display:flex;align-items:center;justify-content:center;z-index:99;';
+  overlay.innerHTML = '<div style="background:#fff;border-radius:14px;padding:28px;width:340px;text-align:center;">' +
+    '<p style="font-size:16px;font-weight:700;margin:0 0 6px;">¿Quién sos?</p>' +
+    '<p style="font-size:13px;color:var(--ink-soft);margin:0 0 18px;">Elegí tu usuario para continuar</p>' +
+    '<select id="user-select" style="width:100%;height:42px;border:1px solid var(--border);border-radius:8px;padding:0 12px;font-size:14px;font-family:inherit;margin-bottom:16px;">' +
+    '<option value="">Seleccionar...</option>' +
+    '<option value="KLOSTER, Jesús Emanuel">KLOSTER, Jesús Emanuel</option>' +
+    '<option value="BENTOS, Leandro Hernán">BENTOS, Leandro Hernán</option>' +
+    '<option value="SANTANA, Maximiliano Sebastián">SANTANA, Maximiliano Sebastián</option>' +
+    '<option value="STIER, Karen Belén">STIER, Karen Belén</option>' +
+    '</select>' +
+    '<button id="user-ok-btn" style="width:100%;height:42px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;">Entrar</button>' +
+    '</div>';
+  document.body.appendChild(overlay);
+  document.getElementById('user-ok-btn').addEventListener('click', function () {
+    var val = document.getElementById('user-select').value;
+    if (!val) { showToast('Elegí un usuario'); return; }
+    localStorage.setItem('usuario_nombre', val);
+    document.getElementById('user-email').textContent = val;
+    overlay.remove();
   });
 }
 
@@ -691,5 +720,9 @@ function bindTabs() {
 }
 
 cargarUsuario();
+document.getElementById('user-email').addEventListener('click', function () {
+  localStorage.removeItem('usuario_nombre');
+  mostrarSelectorUsuario();
+});
 bindTabs();
 cargarRegistros();
