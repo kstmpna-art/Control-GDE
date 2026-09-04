@@ -1,4 +1,4 @@
-var API_URL = 'https://script.google.com/macros/s/AKfycbyK-Uf2e604th_t0SHkcOsOXGkUbnEZ_3CAWs9DlMj3oiZt6UyhhPFggifVtfQCv-xJ/exec';
+var API_URL = 'https://script.google.com/macros/s/AKfycby5BEvMilF-j4Iw6najiJKjNvjtK-yHwx7Z2NKK3ffhKe-eeFMjsBEDmUkCqyZol9Bc/exec';
 var registros = [];
 var cargando = false;
 var state = { view: 'list', tab: 'panel', selectedId: null, filterText: '', filterEstado: 'todos', filterFechaDesde: '', filterFechaHasta: '', page: 1, perPage: 20, sortColumn: 'fecha', sortDirection: 'desc', filterVenceUrgente: false };
@@ -217,6 +217,8 @@ function listHtml() {
     html += '<button class="btn-secondary" id="btn-limpiar-fecha" style="padding:0 14px;">Limpiar</button>';
   }
   html += '<button class="btn-primary" id="new-btn">+ Nuevo registro</button>';
+html += '<button class="btn btn-danger" id="export-btn">Exportar</button>';
+html += '<button class="btn btn-success" id="refresh-btn">Actualizar</button>';
   html += '</div>';
   if (state.tab === 'panel') {
     html += '<div class="dropzone" id="dropzone"><div class="icon">&#8593;</div><p>Arrastrá una o varias notas/oficios (PDF, Word) para crear registros automáticamente, o hacé clic para seleccionar</p><input type="file" id="quick-file-input" multiple style="display:none;"></div>';
@@ -311,7 +313,10 @@ function detailHtml() {
   var dirColor = n.direccion === 'Salida' ? 'var(--ink-soft)' : 'var(--accent-dark)';
   var html = '<div style="display:flex; justify-content:space-between; align-items:center;">';
   html += '<div class="back-link" id="back-btn">&#8592; Volver al listado</div>';
+  html += '<div style="display:flex; gap:8px;">';
+  html += '<button class="btn-secondary" id="refresh-detail-btn">Actualizar</button>';
   html += '<button class="btn-danger" id="delete-btn">Eliminar registro</button>';
+  html += '</div>';
   html += '</div>';
   html += '<div class="card">';
   html += '<div class="detail-header"><div><p class="detail-label">Nota Nº</p><input type="text" id="det-numero" value="' + (n.numero || '') + '" style="border:1px solid var(--border); border-radius:6px; padding:6px 10px; font-family:inherit; font-size:17px; font-weight:700; width:320px;"></div><div style="display:flex; gap:8px; align-items:center;"><select id="det-direccion" style="height:30px; border:1px solid var(--border); border-radius:6px; padding:4px 8px; font-family:inherit; font-size:13px; font-weight:600; background:' + dirBg + '; color:' + dirColor + ';"><option value="Entrada"' + (n.direccion === 'Entrada' ? ' selected' : '') + '>Entrada</option><option value="Salida"' + (n.direccion === 'Salida' ? ' selected' : '') + '>Salida</option></select><select id="det-estado" style="height:30px; border:1px solid var(--border); border-radius:6px; padding:4px 8px; font-family:inherit; font-size:13px; font-weight:600; background:' + (st.cls === 'badge-pendiente' ? 'var(--amber-bg)' : st.cls === 'badge-espera' ? 'var(--coral-bg)' : st.cls === 'badge-cumplido' ? 'var(--green-bg)' : 'var(--indigo-bg)') + '; color:' + (st.cls === 'badge-pendiente' ? 'var(--amber)' : st.cls === 'badge-espera' ? 'var(--coral)' : st.cls === 'badge-cumplido' ? 'var(--green)' : 'var(--indigo)') + ';"><option value="pendiente"' + (n.estado === 'pendiente' ? ' selected' : '') + '>Pendiente</option><option value="espera"' + (n.estado === 'espera' ? ' selected' : '') + '>Espera resp.</option><option value="tomado"' + (n.estado === 'tomado' ? ' selected' : '') + '>Tom. conoc.</option><option value="cumplido"' + (n.estado === 'cumplido' ? ' selected' : '') + '>Cumplido</option></select></div></div>';
@@ -405,6 +410,8 @@ function bindEvents() {
       render();
     });
     document.getElementById('new-btn').addEventListener('click', openModal);
+    document.getElementById('export-btn').addEventListener('click', openExportModal);
+    document.getElementById('refresh-btn').addEventListener('click', function () { cargarRegistros(); showToast('Actualizando...'); });
     var dz = document.getElementById('dropzone');
     if (dz) {
       var qfi = document.getElementById('quick-file-input');
@@ -499,6 +506,7 @@ function bindEvents() {
       state.view = 'list';
       render();
     });
+    document.getElementById('refresh-detail-btn').addEventListener('click', function () { cargarRegistros(); showToast('Actualizando...'); });
     document.querySelectorAll('.attach-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var input = document.querySelector('.dest-file-input[data-id="' + btn.getAttribute('data-id') + '"]');
@@ -708,12 +716,12 @@ async function handleQuickFiles(fileList) {
       await new Promise(function (resolve, reject) {
         fileToBase64(file, async function (archivoData) {
           try {
-            var res = await apiPost('crearRegistroDesdeArchivo', { archivo: archivoData, direccion: 'Entrada' });
+            var res = await apiPost('crearRegistroDesdeArchivo', { archivo: archivoData, direccion: 'Entrada', creadoPor: localStorage.getItem('usuario_nombre') || '' });
             if (res.duplicado) {
               if (confirm('Ya existe un registro con el número ' + res.numero + '. ¿Desea reemplazarlo?')) {
                 await apiPost('eliminarRegistroPorNumero', { numero: res.numero });
                 showToast('Registro anterior eliminado, creando nuevo...');
-                await apiPost('crearRegistroDesdeArchivo', { archivo: archivoData, direccion: 'Entrada' });
+                await apiPost('crearRegistroDesdeArchivo', { archivo: archivoData, direccion: 'Entrada', creadoPor: localStorage.getItem('usuario_nombre') || '' });
               } else {
                 showToast('Se omitió: ' + res.numero);
               }
@@ -824,7 +832,8 @@ document.getElementById('save-modal-btn').addEventListener('click', async functi
       fechaLimite: fechaLimite,
       observaciones: document.getElementById('f-obs').value.trim(),
       destinatarios: destinatarios,
-      archivo: archData
+      archivo: archData,
+      creadoPor: localStorage.getItem('usuario_nombre') || ''
     };
     try {
       showToast('Guardando registro...');
@@ -854,6 +863,261 @@ function bindTabs() {
     });
   });
 }
+
+function openExportModal() {
+  document.getElementById('export-modal-overlay').classList.add('open');
+  var hoy = new Date();
+  var primerDia = new Date(hoy);
+  primerDia.setDate(hoy.getDate() - hoy.getDay() + 1);
+  var ultimoDia = new Date(primerDia);
+  ultimoDia.setDate(primerDia.getDate() + 6);
+  document.getElementById('export-fecha-desde').value = primerDia.toISOString().split('T')[0];
+  document.getElementById('export-fecha-hasta').value = ultimoDia.toISOString().split('T')[0];
+}
+
+function closeExportModal() {
+  document.getElementById('export-modal-overlay').classList.remove('open');
+}
+
+function fechaHoraExportacion() {
+  var now = new Date();
+  var dia = ('0' + now.getDate()).slice(-2);
+  var mes = ('0' + (now.getMonth() + 1)).slice(-2);
+  var anio = now.getFullYear();
+  var horas = ('0' + now.getHours()).slice(-2);
+  var minutos = ('0' + now.getMinutes()).slice(-2);
+  var segundos = ('0' + now.getSeconds()).slice(-2);
+  return dia + '/' + mes + '/' + anio + ' ' + horas + ':' + minutos + ':' + segundos;
+}
+
+function estadoLabel(estado) {
+  var labels = { pendiente: 'Pendiente', espera: 'Espera resp.', cumplido: 'Cumplido', tomado: 'Tom. conoc.' };
+  return labels[estado] || estado;
+}
+
+async function exportarExcel(registros, fechaDesde, fechaHasta) {
+  var encabezados = [
+    'N° Ref', 'Tipo', 'Dirección', 'Referencia', 'Fecha', 'Fecha Límite', 'Estado', 'Observaciones',
+    'Dest. Nombre', 'Dest. Dependencia', 'Dest. Estado', 'Dest. Fecha Resp.', 'Dest. Observaciones'
+  ];
+
+  var filas = [];
+  registros.forEach(function (n) {
+    if (n.destinatarios.length === 0) {
+      filas.push([n.numero, n.tipo, n.direccion, n.referencia, n.fecha, n.fechaLimite, estadoLabel(n.estado), n.observaciones || '', '', '', '', '', '']);
+    } else {
+      n.destinatarios.forEach(function (d, idx) {
+        if (idx === 0) {
+          filas.push([n.numero, n.tipo, n.direccion, n.referencia, n.fecha, n.fechaLimite, estadoLabel(n.estado), n.observaciones || '', d.nombre, d.dependencia, estadoLabel(d.estado), d.fechaRespuesta, d.observaciones || '']);
+        } else {
+          filas.push(['', '', '', '', '', '', '', '', d.nombre, d.dependencia, estadoLabel(d.estado), d.fechaRespuesta, d.observaciones || '']);
+        }
+      });
+    }
+  });
+
+  var ws_data = [encabezados].concat(filas);
+  ws_data.push([]);
+  ws_data.push(['Exportado el: ' + fechaHoraExportacion()]);
+
+  var ws = XLSX.utils.aoa_to_sheet(ws_data);
+  ws['!cols'] = [
+    { wch: 15 }, { wch: 10 }, { wch: 12 }, { wch: 40 }, { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 30 },
+    { wch: 30 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 25 }
+  ];
+
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Registros');
+  XLSX.writeFile(wb, 'Exportacion_' + fechaDesde + '_' + fechaHasta + '.xlsx');
+}
+
+async function exportarPDF(registros, fechaDesde, fechaHasta) {
+  var doc = new jspdf.jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  var pageW = 210;
+  var marginL = 15;
+  var marginR = 15;
+  var contentW = pageW - marginL - marginR;
+
+  function drawTitle(yPos) {
+    doc.setFontSize(16);
+    doc.setFont(undefined, 'bold');
+    doc.text('Exportacion de Registros', pageW / 2, yPos, { align: 'center' });
+    doc.setFontSize(10);
+    doc.setFont(undefined, 'normal');
+    doc.setTextColor(100, 100, 100);
+    doc.text('Periodo: ' + fechaDesde + ' al ' + fechaHasta, pageW / 2, yPos + 7, { align: 'center' });
+    doc.text('Exportado: ' + fechaHoraExportacion(), pageW / 2, yPos + 13, { align: 'center' });
+    doc.setTextColor(0, 0, 0);
+    return yPos + 25;
+  }
+
+  var y = drawTitle(20);
+
+  registros.forEach(function (n, idx) {
+    var refH = 0;
+    if (n.referencia) {
+      var tmpRef = doc.splitTextToSize(n.referencia, contentW - 10);
+      refH = tmpRef.length > 1 ? 14 : 8;
+    }
+    var obsH = n.observaciones ? 8 : 0;
+    var destH = n.destinatarios.length > 0 ? 10 + (n.destinatarios.length * 8) : 0;
+    var blockH = 22 + refH + obsH + destH;
+
+    if (y + blockH > 270) {
+      doc.addPage();
+      y = 20;
+    }
+
+    // Fondo del bloque
+    doc.setFillColor(240, 245, 248);
+    doc.roundedRect(marginL, y, contentW, blockH, 3, 3, 'F');
+
+    // Línea superior color
+    doc.setFillColor(27, 138, 152);
+    doc.rect(marginL, y, contentW, 1.5, 'F');
+
+    var lineY = y + 10;
+
+    // Número
+    doc.setFontSize(12);
+    doc.setFont(undefined, 'bold');
+    doc.text(n.numero || 'S/N', marginL + 5, lineY);
+
+    // Fecha (a la derecha)
+    doc.setFontSize(9);
+    doc.setFont(undefined, 'normal');
+    doc.setTextColor(100, 100, 100);
+    doc.text('Fecha: ' + (n.fecha || '-') + (n.fechaLimite ? '  |  Vence: ' + n.fechaLimite : ''), pageW - marginR - 5, lineY, { align: 'right' });
+    doc.setTextColor(0, 0, 0);
+
+    lineY += 8;
+
+    // Estado (nueva línea)
+    var stInfo = estadoInfo(n.estado);
+    doc.setFontSize(9);
+    doc.setFont(undefined, 'normal');
+    doc.text('Estado: ' + stInfo.label, marginL + 5, lineY);
+
+    lineY += 10;
+
+    // Referencia
+    if (n.referencia) {
+      doc.setFontSize(9.5);
+      doc.setFont(undefined, 'bold');
+      var refLines = doc.splitTextToSize(n.referencia, contentW - 10);
+      doc.text(refLines.slice(0, 2), marginL + 5, lineY);
+      lineY += refH;
+    }
+
+    // Observaciones
+    if (n.observaciones) {
+      doc.setFontSize(8);
+      doc.setFont(undefined, 'italic');
+      doc.setTextColor(80, 80, 80);
+      var obsLines = doc.splitTextToSize('Obs: ' + n.observaciones, contentW - 10);
+      doc.text(obsLines.slice(0, 1), marginL + 5, lineY);
+      doc.setTextColor(0, 0, 0);
+      lineY += 8;
+    }
+
+    // Destinatarios
+    if (n.destinatarios.length > 0) {
+      doc.setFontSize(8);
+      doc.setFont(undefined, 'normal');
+      doc.setFillColor(220, 230, 235);
+      doc.rect(marginL + 5, lineY - 2, contentW - 10, 6, 'F');
+      doc.setFont(undefined, 'bold');
+      doc.text('Destinatarios:', marginL + 7, lineY + 2);
+      doc.setFont(undefined, 'normal');
+      lineY += 10;
+
+      n.destinatarios.forEach(function (d) {
+        doc.setFontSize(8);
+        var destText = '  - ' + (d.nombre || '') + (d.dependencia ? ' (' + d.dependencia + ')' : '') + ' [' + estadoLabel(d.estado) + ']';
+        doc.text(destText, marginL + 7, lineY + 2);
+        lineY += 8;
+      });
+    }
+
+    y += blockH + 10;
+  });
+
+  doc.setFontSize(7);
+  doc.setTextColor(150, 150, 150);
+  doc.text('Sistema de Control de Oficios, Notas e Informes', pageW / 2, 290, { align: 'center' });
+
+  doc.save('Exportacion_' + fechaDesde + '_' + fechaHasta + '.pdf');
+}
+
+async function ejecutarExportacion() {
+  var fechaDesde = document.getElementById('export-fecha-desde').value;
+  var fechaHasta = document.getElementById('export-fecha-hasta').value;
+  var formato = document.getElementById('export-formato').value;
+
+  if (!fechaDesde || !fechaHasta) {
+    showToast('Seleccioná ambas fechas');
+    return;
+  }
+
+  try {
+    showToast('Filtrando registros...');
+
+    var filtrados = registros.filter(function (n) {
+      if (!n.fecha) return false;
+      var parts = n.fecha.split('/');
+      var fechaReg = parts[2] + '-' + parts[1] + '-' + parts[0];
+      if (fechaDesde && fechaReg < fechaDesde) return false;
+      if (fechaHasta && fechaReg > fechaHasta) return false;
+      return true;
+    });
+
+    var registrosExport = filtrados.map(function (n) {
+      return {
+        numero: n.numero,
+        tipo: n.tipo || '',
+        direccion: n.direccion || 'Entrada',
+        referencia: n.referencia || '',
+        fecha: n.fecha || '',
+        fechaLimite: n.fechaLimite || '',
+        estado: n.estado,
+        observaciones: n.observaciones || '',
+        destinatarios: (n.destinatarios || []).map(function (d) {
+          return {
+            nombre: d.nombre,
+            dependencia: d.dependencia || '',
+            estado: d.estado,
+            fechaRespuesta: d.fechaRespuesta || '',
+            observaciones: d.observaciones || ''
+          };
+        })
+      };
+    });
+
+    if (registrosExport.length === 0) {
+      showToast('No hay registros en ese período');
+      return;
+    }
+
+    showToast('Exportando ' + registrosExport.length + ' registros...');
+
+    if (formato === 'excel') {
+      await exportarExcel(registrosExport, fechaDesde, fechaHasta);
+    } else {
+      await exportarPDF(registrosExport, fechaDesde, fechaHasta);
+    }
+
+    showToast('Exportación completada');
+    closeExportModal();
+  } catch (e) {
+    showToast('Error: ' + e.message);
+  }
+}
+
+document.getElementById('export-modal-overlay').addEventListener('click', function (e) {
+  if (e.target === this) closeExportModal();
+});
+document.getElementById('cancel-export-btn').addEventListener('click', closeExportModal);
+document.getElementById('confirm-export-btn').addEventListener('click', ejecutarExportacion);
 
 cargarUsuario();
 document.getElementById('user-email').addEventListener('click', function () {
