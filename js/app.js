@@ -1,4 +1,4 @@
-var API_URL = 'https://script.google.com/macros/s/AKfycbyNvz-SYl9sS2FvDH7g4dPcEWo_wGyieqJLyFD8mkqap8wf-JrsIGpHSCIcYnt_-GbB/exec';
+var API_URL = 'https://script.google.com/macros/s/AKfycbyK-Uf2e604th_t0SHkcOsOXGkUbnEZ_3CAWs9DlMj3oiZt6UyhhPFggifVtfQCv-xJ/exec';
 var registros = [];
 var cargando = false;
 var state = { view: 'list', tab: 'panel', selectedId: null, filterText: '', filterEstado: 'todos', filterFechaDesde: '', filterFechaHasta: '', page: 1, perPage: 20, sortColumn: 'fecha', sortDirection: 'desc', filterVenceUrgente: false };
@@ -76,6 +76,7 @@ function cargarRegistros() {
     if (Array.isArray(data)) {
       registros = data;
       render();
+      detectarYEnviarAlertas();
     } else {
       showToast('Error: respuesta inesperada del servidor');
     }
@@ -84,6 +85,27 @@ function cargarRegistros() {
   }).finally(function () {
     cargando = false;
   });
+}
+
+function detectarYEnviarAlertas() {
+  var urgentes = registros.filter(function (n) {
+    return n.estado === 'espera' && n.diasVence !== null && n.diasVence <= 5 && n.diasVence >= 0;
+  });
+  if (urgentes.length === 0) return;
+
+  var alertas = urgentes.map(function (n) {
+    return {
+      id: n.id,
+      numero: n.numero,
+      referencia: n.referencia,
+      fechaLimite: n.fechaLimite,
+      diasVence: n.diasVence,
+      estado: n.estado,
+      archivoUrl: n.archivoUrl || ''
+    };
+  });
+
+  apiPost('enviarAlertasEmail', { alertas: alertas }).catch(function () {});
 }
 
 function estadoInfo(e) {
