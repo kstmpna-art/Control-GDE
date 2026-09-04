@@ -1,7 +1,7 @@
 var API_URL = 'https://script.google.com/macros/s/AKfycbyNvz-SYl9sS2FvDH7g4dPcEWo_wGyieqJLyFD8mkqap8wf-JrsIGpHSCIcYnt_-GbB/exec';
 var registros = [];
 var cargando = false;
-var state = { view: 'list', tab: 'panel', selectedId: null, filterText: '', filterEstado: 'todos', filterFechaDesde: '', filterFechaHasta: '', page: 1, perPage: 20, sortColumn: 'fecha', sortDirection: 'desc' };
+var state = { view: 'list', tab: 'panel', selectedId: null, filterText: '', filterEstado: 'todos', filterFechaDesde: '', filterFechaHasta: '', page: 1, perPage: 20, sortColumn: 'fecha', sortDirection: 'desc', filterVenceUrgente: false };
 
 function showToast(msg) {
   var t = document.getElementById('toast');
@@ -106,6 +106,9 @@ function filteredRegistros() {
       (n.referencia || '').toLowerCase().indexOf(t) > -1 ||
       (n.observaciones || '').toLowerCase().indexOf(t) > -1;
     var matchEstado = state.filterEstado === 'todos' || n.estado === state.filterEstado;
+    if (state.filterVenceUrgente) {
+      matchEstado = matchEstado && n.estado === 'espera' && n.diasVence !== null && n.diasVence <= 3 && n.diasVence >= 0;
+    }
     var matchFecha = true;
     if (state.filterFechaDesde && n.fecha) {
       var parts = n.fecha.split('/');
@@ -398,15 +401,18 @@ function bindEvents() {
     var alertaEl = document.getElementById('alerta-vencimiento');
     if (alertaEl) {
       alertaEl.addEventListener('click', function () {
-        if (state.filterEstado === 'espera') {
+        if (state.filterEstado === 'espera' && state.filterVenceUrgente) {
           state.filterEstado = 'todos';
+          state.filterVenceUrgente = false;
           document.getElementById('estado-filter').value = 'todos';
           showToast('Mostrando todos los registros');
         } else {
           state.filterEstado = 'espera';
+          state.filterVenceUrgente = true;
           document.getElementById('estado-filter').value = 'espera';
-          showToast('Mostrando registros en espera de respuesta');
+          showToast('Mostrando solo los que vencen en 3 días o menos');
         }
+        state.page = 1;
         render();
       });
     }
