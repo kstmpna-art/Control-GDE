@@ -1,7 +1,7 @@
-var API_URL = 'https://script.google.com/macros/s/AKfycby5BEvMilF-j4Iw6najiJKjNvjtK-yHwx7Z2NKK3ffhKe-eeFMjsBEDmUkCqyZol9Bc/exec';
+var API_URL = 'https://script.google.com/macros/s/AKfycbwWGRaia1TCmJblf2UGzdrN9ne_HZOSYTAaf5AqGSrqqK737KZHIsm1NJz-bJ_KF3Ca/exec';
 var registros = [];
 var cargando = false;
-var state = { view: 'list', tab: 'panel', selectedId: null, filterText: '', filterEstado: 'todos', filterFechaDesde: '', filterFechaHasta: '', page: 1, perPage: 20, sortColumn: 'fecha', sortDirection: 'desc', filterVenceUrgente: false };
+var state = { view: 'list', tab: 'panel', selectedId: null, previousSelectedId: null, filterText: '', filterEstado: 'todos', filterFechaDesde: '', filterFechaHasta: '', page: 1, perPage: 20, sortColumn: 'fecha', sortDirection: 'desc', filterVenceUrgente: false };
 
 function showToast(msg) {
   var t = document.getElementById('toast');
@@ -312,16 +312,24 @@ function detailHtml() {
   var dirBg = n.direccion === 'Salida' ? 'var(--surface-alt)' : 'var(--accent-bg)';
   var dirColor = n.direccion === 'Salida' ? 'var(--ink-soft)' : 'var(--accent-dark)';
   var html = '<div style="display:flex; justify-content:space-between; align-items:center;">';
+  html += '<div style="display:flex; gap:12px; align-items:center;">';
   html += '<div class="back-link" id="back-btn">&#8592; Volver al listado</div>';
+  if (state.previousSelectedId) {
+    var notaAnterior = registros.find(function (x) { return x.id === state.previousSelectedId; });
+    if (notaAnterior) {
+      html += '<div class="back-link" id="back-to-main-btn" style="color:var(--accent);">&#8592; Volver a ' + notaAnterior.numero + '</div>';
+    }
+  }
+  html += '</div>';
   html += '<div style="display:flex; gap:8px;">';
   html += '<button class="btn-secondary" id="refresh-detail-btn">Actualizar</button>';
   html += '<button class="btn-danger" id="delete-btn">Eliminar registro</button>';
   html += '</div>';
   html += '</div>';
   html += '<div class="card">';
-  html += '<div class="detail-header"><div><p class="detail-label">Nota Nº</p><input type="text" id="det-numero" value="' + (n.numero || '') + '" style="border:1px solid var(--border); border-radius:6px; padding:6px 10px; font-family:inherit; font-size:17px; font-weight:700; width:320px;"></div><div style="display:flex; gap:8px; align-items:center;"><select id="det-direccion" style="height:30px; border:1px solid var(--border); border-radius:6px; padding:4px 8px; font-family:inherit; font-size:13px; font-weight:600; background:' + dirBg + '; color:' + dirColor + ';"><option value="Entrada"' + (n.direccion === 'Entrada' ? ' selected' : '') + '>Entrada</option><option value="Salida"' + (n.direccion === 'Salida' ? ' selected' : '') + '>Salida</option></select><select id="det-estado" style="height:30px; border:1px solid var(--border); border-radius:6px; padding:4px 8px; font-family:inherit; font-size:13px; font-weight:600; background:' + (st.cls === 'badge-pendiente' ? 'var(--amber-bg)' : st.cls === 'badge-espera' ? 'var(--coral-bg)' : st.cls === 'badge-cumplido' ? 'var(--green-bg)' : 'var(--indigo-bg)') + '; color:' + (st.cls === 'badge-pendiente' ? 'var(--amber)' : st.cls === 'badge-espera' ? 'var(--coral)' : st.cls === 'badge-cumplido' ? 'var(--green)' : 'var(--indigo)') + ';"><option value="pendiente"' + (n.estado === 'pendiente' ? ' selected' : '') + '>Pendiente</option><option value="espera"' + (n.estado === 'espera' ? ' selected' : '') + '>Espera resp.</option><option value="tomado"' + (n.estado === 'tomado' ? ' selected' : '') + '>Tom. conoc.</option><option value="cumplido"' + (n.estado === 'cumplido' ? ' selected' : '') + '>Cumplido</option></select></div></div>';
+  html += '<div class="detail-header"><div><p class="detail-label">Nota Nº</p><input type="text" id="det-numero" value="' + (n.numero || '') + '" style="border:1px solid var(--border); border-radius:6px; padding:6px 10px; font-family:inherit; font-size:17px; font-weight:700; width:320px;"></div><div style="display:flex; gap:8px; align-items:center;"><select id="det-direccion" style="height:30px; border:1px solid var(--border); border-radius:6px; padding:4px 8px; font-family:inherit; font-size:13px; font-weight:600; background:' + dirBg + '; color:' + dirColor + ';"><option value="Entrada"' + (n.direccion === 'Entrada' ? ' selected' : '') + '>Entrada</option><option value="Salida"' + (n.direccion === 'Salida' ? ' selected' : '') + '>Salida</option></select><select id="det-estado" style="height:30px; border:1px solid var(--border); border-radius:6px; padding:4px 8px; font-family:inherit; font-size:13px; font-weight:600; background:' + (st.cls === 'badge-pendiente' ? 'var(--amber-bg)' : st.cls === 'badge-espera' ? 'var(--coral-bg)' : st.cls === 'badge-cumplido' ? 'var(--green-bg)' : 'var(--indigo-bg)') + '; color:' + (st.cls === 'badge-pendiente' ? 'var(--amber)' : st.cls === 'badge-espera' ? 'var(--coral)' : st.cls === 'badge-cumplido' ? 'var(--green)' : 'var(--indigo)') + ';"><option value="pendiente"' + (n.estado === 'pendiente' ? ' selected' : '') + '>Pendiente</option><option value="espera"' + (n.estado === 'espera' ? ' selected' : '') + '>Espera resp.</option><option value="tomado"' + (n.estado === 'tomado' ? ' selected' : '') + '>Tomado</option><option value="cumplido"' + (n.estado === 'cumplido' ? ' selected' : '') + '>Cumplido</option></select></div></div>';
   html += '<table class="detail-table">';
-  html += '<tr><td>Referencia</td><td><input type="text" id="det-referencia" value="' + (n.referencia || '').replace(/"/g, '&quot;') + '" style="border:1px solid var(--border); border-radius:6px; padding:6px 10px; font-family:inherit; font-size:13.5px; width:100%;"></td></tr>';
+  html += '<tr><td>Referencia</td><td><input type="text" id="det-referencia" value="' + (n.referencia || '').replace(/"/g, '"') + '" style="border:1px solid var(--border); border-radius:6px; padding:6px 10px; font-family:inherit; font-size:13.5px; width:100%;"></td></tr>';
   html += '<tr><td>Fecha</td><td><input type="date" id="det-fecha" value="' + dmyToIso(n.fecha) + '" style="border:1px solid var(--border); border-radius:6px; padding:4px 8px; font-family:inherit; font-size:13px;"></td></tr>';
   html += '<tr><td>Vence respuesta</td><td><input type="date" id="det-fechalimite" value="' + dmyToIso(n.fechaLimite) + '" style="border:1px solid var(--border); border-radius:6px; padding:4px 8px; font-family:inherit; font-size:13px;">' + (n.diasVence !== null && n.fechaLimite ? ' <span class="vence-danger">(' + n.diasVence + ' días)</span>' : '') + '</td></tr>';
   if (n.archivoUrl) {
@@ -329,7 +337,51 @@ function detailHtml() {
   }
   html += '</table></div>';
 
-  html += '<p style="font-size:14px; font-weight:700; margin:0 0 10px;">Destinatarios (' + contestaron + ' de ' + n.destinatarios.length + ' contestaron)</p>';
+  // MOSTRAR TODAS LAS NOTAS VINCULADAS
+  var todasVinculadas = [];
+
+  // 1. Nota a la que está vinculada ESTA nota (si existe)
+  if (n.notaVinculadaId) {
+    var vn = registros.find(function (x) { return x.id === n.notaVinculadaId; });
+    if (vn) {
+      todasVinculadas.push({ nota: vn, tipo: 'vinculada_a', label: 'Esta nota está vinculada a:' });
+    }
+  }
+
+  // 2. Notas que están vinculadas A ESTA nota
+  var notasQueLaVinculan = registros.filter(function (x) { return x.notaVinculadaId === n.id; });
+  notasQueLaVinculan.forEach(function (x) {
+    todasVinculadas.push({ nota: x, tipo: 'vinculada_desde', label: 'Tiene esta nota vinculada:' });
+  });
+
+  if (todasVinculadas.length > 0) {
+    html += '<div class="card" style="background:var(--accent-bg); border-left:3px solid var(--accent); margin-top:10px; padding:12px;">';
+    html += '<p style="font-size:13px; font-weight:700; margin:0 0 8px;">Notas vinculadas (' + todasVinculadas.length + ')</p>';
+    todasVinculadas.forEach(function (item) {
+      var vn = item.nota;
+      var stVn = estadoInfo(vn.estado);
+      var icono = item.tipo === 'vinculada_a' ? '&#8599;' : '&#8601;';
+      html += '<div style="display:flex; align-items:center; justify-content:space-between; padding:6px 0; border-bottom:1px solid rgba(0,0,0,0.08);">';
+      html += '<div>';
+      html += '<p style="font-size:11px; color:var(--ink-soft); margin:0;">' + item.label + '</p>';
+      html += '<p style="margin:2px 0 0; font-weight:700; cursor:pointer; font-size:13px;" class="nota-vinculada-link" data-id="' + vn.id + '">';
+      html += icono + ' ' + vn.numero + ' — ' + (vn.referencia || 'Sin referencia') + '</p>';
+      html += '</div>';
+      html += '<div style="display:flex; align-items:center; gap:6px;">';
+      html += '<span class="badge ' + stVn.cls + '" style="font-size:10px;">' + stVn.label + '</span>';
+      if (item.tipo === 'vinculada_a') {
+        html += '<button class="btn-danger desvincular-btn-actual" style="padding:3px 8px; font-size:10px;">X</button>';
+      }
+      html += '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+
+  // BOTÓN VINCULAR
+  html += '<button class="btn-secondary" id="vincular-btn" style="margin-top:10px;">Vincular nota</button>';
+
+  html += '<p style="font-size:14px; font-weight:700; margin:10px 0 0 0;">Destinatarios (' + contestaron + ' de ' + n.destinatarios.length + ' contestaron)</p>';
   n.destinatarios.forEach(function (d) {
     var ds = estadoInfo(d.estado);
     html += '<div class="dest-row">';
@@ -377,6 +429,7 @@ function bindEvents() {
       row.addEventListener('click', function (e) {
         if (e.target.classList.contains('estado-rapido') || e.target.classList.contains('direccion-rapido')) return;
         state.selectedId = row.getAttribute('data-id');
+        state.previousSelectedId = null;
         state.view = 'detail';
         render();
       });
@@ -504,9 +557,50 @@ function bindEvents() {
   } else {
     document.getElementById('back-btn').addEventListener('click', function () {
       state.view = 'list';
+      state.previousSelectedId = null;
       render();
     });
     document.getElementById('refresh-detail-btn').addEventListener('click', function () { cargarRegistros(); showToast('Actualizando...'); });
+
+    // Botón Vincular nota
+    var vincularBtn = document.getElementById('vincular-btn');
+    if (vincularBtn) {
+      vincularBtn.addEventListener('click', function () {
+        openVincularModal();
+      });
+    }
+
+    // Botón Desvincular
+    document.querySelectorAll('.desvincular-btn-actual').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (confirm('¿Desvincular esta nota?')) {
+          desvincularNota();
+        }
+      });
+    });
+
+    // Link a nota vinculada (clickeable)
+    document.querySelectorAll('.nota-vinculada-link').forEach(function (el) {
+      el.addEventListener('click', function () {
+        state.previousSelectedId = state.selectedId;
+        state.selectedId = el.getAttribute('data-id');
+        state.view = 'detail';
+        render();
+      });
+    });
+
+    // Botón volver a nota principal
+    var backToMainBtn = document.getElementById('back-to-main-btn');
+    if (backToMainBtn) {
+      backToMainBtn.addEventListener('click', function () {
+        state.selectedId = state.previousSelectedId;
+        state.previousSelectedId = null;
+        state.view = 'detail';
+        render();
+      });
+    }
+
     document.querySelectorAll('.attach-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var input = document.querySelector('.dest-file-input[data-id="' + btn.getAttribute('data-id') + '"]');
@@ -851,6 +945,151 @@ document.getElementById('save-modal-btn').addEventListener('click', async functi
     procesarGuardado(null);
   }
 });
+
+var notaVinculadaSeleccionada = null;
+
+function openVincularModal() {
+  notaVinculadaSeleccionada = null;
+  var overlay = document.createElement('div');
+  overlay.id = 'vincular-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(16,36,62,0.8);display:flex;align-items:center;justify-content:center;z-index:100;';
+  overlay.innerHTML = '<div style="background:#fff;border-radius:14px;padding:28px;width:400px;max-width:90%;text-align:left;">' +
+    '<p style="font-size:16px;font-weight:700;margin:0 0 10px;">Vincular nota</p>' +
+    '<p style="font-size:13px;color:var(--ink-soft);margin:0 0 18px;">Escribí el número de nota o palabra clave para buscar. Seleccioná una nota de la lista.</p>' +
+    '<input type="text" id="buscar-nota-input" placeholder="Escribí para buscar..." autofocus style="width:100%;height:40px;border:1px solid var(--border);border-radius:8px;padding:0 12px;font-size:14px;margin-bottom:12px;">' +
+    '<div id="resultados-busqueda" style="max-height:250px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px;margin-bottom:16px;min-height:60px;"></div>' +
+    '<p id="nota-seleccionada-text" style="font-size:12px;color:var(--accent);margin:0 0 12px;display:none;"></p>' +
+    '<button id="btn-cancelar-vincular" style="width:100%;height:40px;background:var(--surface);color:var(--ink);border:1px solid var(--border);border-radius:8px;font-size:14px;margin-bottom:10px;">Cancelar</button>' +
+    '<button id="btn-confimar-vincular" style="width:100%;height:40px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:14px;" disabled>Vincular</button>' +
+    '</div>';
+  document.body.appendChild(overlay);
+
+  document.getElementById('btn-cancelar-vincular').addEventListener('click', function () {
+    overlay.remove();
+  });
+
+  document.getElementById('btn-confimar-vincular').addEventListener('click', function () {
+    if (notaVinculadaSeleccionada) {
+      confirmarVinculacion(notaVinculadaSeleccionada);
+      overlay.remove();
+    }
+  });
+
+  var input = document.getElementById('buscar-nota-input');
+  var debounceTimer = null;
+
+  input.addEventListener('input', function () {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(function () {
+      var query = input.value.trim();
+      if (query.length >= 2) {
+        buscarNotasVincular(query);
+      } else {
+        document.getElementById('resultados-busqueda').innerHTML = '<p style="font-size:12px;color:var(--ink-soft);padding:8px;">Escribí al menos 2 caracteres para buscar</p>';
+        document.getElementById('btn-confimar-vincular').disabled = true;
+        notaVinculadaSeleccionada = null;
+        document.getElementById('nota-seleccionada-text').style.display = 'none';
+      }
+    }, 200);
+  });
+
+  input.addEventListener('keypress', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+    }
+  });
+
+  setTimeout(function () {
+    input.focus();
+    document.getElementById('resultados-busqueda').innerHTML = '<p style="font-size:12px;color:var(--ink-soft);padding:8px;">Escribí al menos 2 caracteres para buscar</p>';
+  }, 50);
+}
+
+function buscarNotasVincular(query) {
+  var contenedor = document.getElementById('resultados-busqueda');
+  if (!contenedor) return;
+
+  var q = query.toLowerCase();
+  var resultados = registros.filter(function (n) {
+    return n.id !== state.selectedId &&
+      ((n.numero || '').toLowerCase().indexOf(q) > -1 ||
+       (n.referencia || '').toLowerCase().indexOf(q) > -1 ||
+       (n.observaciones || '').toLowerCase().indexOf(q) > -1);
+  });
+
+  if (resultados.length === 0) {
+    contenedor.innerHTML = '<p style="font-size:13px;color:var(--ink-soft);padding:8px;">No se encontraron notas con "' + query + '"</p>';
+    document.getElementById('btn-confimar-vincular').disabled = true;
+    notaVinculadaSeleccionada = null;
+    document.getElementById('nota-seleccionada-text').style.display = 'none';
+    return;
+  }
+
+  var html = '';
+  resultados.forEach(function (n) {
+    var st = n.estado ? estadoInfo(n.estado) : { label: '', cls: '' };
+    var selectedStyle = notaVinculadaSeleccionada === n.id ? 'background:var(--accent-bg);border:1px solid var(--accent);' : '';
+    html += '<div class="resultado-vincular-item" style="padding:8px 10px;border-bottom:1px solid var(--border);cursor:pointer;border-radius:6px;margin-bottom:4px;' + selectedStyle + '" data-id="' + n.id + '">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+    html += '<strong style="font-size:13px;">' + n.numero + '</strong>';
+    html += '<span class="badge ' + st.cls + '" style="font-size:10px;padding:2px 6px;">' + st.label + '</span>';
+    html += '</div>';
+    html += '<p style="font-size:12px;color:var(--ink-soft);margin:4px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">' + (n.referencia || 'Sin referencia') + '</p>';
+    if (n.fecha) {
+      html += '<p style="font-size:11px;color:var(--ink-faint);margin:2px 0 0;">Fecha: ' + n.fecha + '</p>';
+    }
+    html += '</div>';
+  });
+  contenedor.innerHTML = html;
+
+  document.querySelectorAll('.resultado-vincular-item').forEach(function (el) {
+    el.addEventListener('click', function () {
+      var notaId = el.getAttribute('data-id');
+      notaVinculadaSeleccionada = notaId;
+
+      document.querySelectorAll('.resultado-vincular-item').forEach(function (item) {
+        item.style.background = '';
+        item.style.border = '1px solid transparent';
+      });
+      el.style.background = 'var(--accent-bg)';
+      el.style.border = '1px solid var(--accent)';
+
+      var notaSeleccionada = registros.find(function (x) { return x.id === notaId; });
+      if (notaSeleccionada) {
+        var textoSeleccion = document.getElementById('nota-seleccionada-text');
+        textoSeleccion.textContent = '✓ Seleccionada: ' + notaSeleccionada.numero + ' — ' + (notaSeleccionada.referencia || '');
+        textoSeleccion.style.display = 'block';
+      }
+
+      document.getElementById('btn-confimar-vincular').disabled = false;
+    });
+  });
+}
+
+function confirmarVinculacion(notaId) {
+  apiPost('vincularNotas', { notaId: state.selectedId, notaVinculadaId: notaId }).then(function (res) {
+    if (res.ok) {
+      showToast('Notas vinculadas');
+      cargarRegistros();
+      var n = registros.find(function (x) { return x.id === state.selectedId; });
+      if (n) render();
+    } else {
+      showToast('Error: ' + (res.error || 'Desconocido'));
+    }
+  }).catch(function (e) { showToast('Error: ' + e.message); });
+}
+
+function desvincularNota() {
+  apiPost('desvincularNotas', { notaId: state.selectedId }).then(function (res) {
+    if (res.ok) {
+      showToast('Nota desvinculada');
+      cargarRegistros();
+      render();
+    } else {
+      showToast('Error: ' + (res.error || 'Desconocido'));
+    }
+  }).catch(function (e) { showToast('Error: ' + e.message); });
+}
 
 function bindTabs() {
   document.querySelectorAll('.tab-link').forEach(function (tab) {
