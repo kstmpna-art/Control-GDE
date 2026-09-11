@@ -66,7 +66,8 @@ function mostrarSelectorUsuario() {
 }
 
 document.getElementById('logout-btn').addEventListener('click', function () {
-  window.open('https://accounts.google.com/Logout', '_blank');
+  localStorage.removeItem('usuario_nombre');
+  location.reload();
 });
 
 function cargarRegistros() {
