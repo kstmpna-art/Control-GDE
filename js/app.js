@@ -1,7 +1,7 @@
 var API_URL = 'https://script.google.com/macros/s/AKfycbwWGRaia1TCmJblf2UGzdrN9ne_HZOSYTAaf5AqGSrqqK737KZHIsm1NJz-bJ_KF3Ca/exec';
 var registros = [];
 var cargando = false;
-var state = { view: 'list', tab: 'panel', selectedId: null, previousSelectedId: null, filterText: '', filterEstado: 'todos', filterFechaDesde: '', filterFechaHasta: '', page: 1, perPage: 20, sortColumn: 'fecha', sortDirection: 'desc', filterVenceUrgente: false };
+var state = { view: 'list', tab: 'panel', selectedId: null, previousSelectedId: null, filterText: '', filterEstado: 'todos', filterVenceDias: null, filterFechaDesde: '', filterFechaHasta: '', page: 1, perPage: 20, sortColumn: 'fecha', sortDirection: 'desc' };
 
 function showToast(msg) {
   var t = document.getElementById('toast');
@@ -128,8 +128,8 @@ function filteredRegistros() {
       (n.referencia || '').toLowerCase().indexOf(t) > -1 ||
       (n.observaciones || '').toLowerCase().indexOf(t) > -1;
     var matchEstado = state.filterEstado === 'todos' || n.estado === state.filterEstado;
-    if (state.filterVenceUrgente) {
-      matchEstado = matchEstado && n.estado === 'espera' && n.diasVence !== null && n.diasVence <= 3 && n.diasVence >= 0;
+    if (state.filterVenceDias) {
+      matchEstado = matchEstado && n.estado === 'espera' && n.diasVence !== null && n.diasVence <= state.filterVenceDias && n.diasVence >= 0;
     }
     var matchFecha = true;
     if (state.filterFechaDesde && n.fecha) {
@@ -181,17 +181,18 @@ function listHtml() {
   var html = '';
   if (state.tab === 'panel') {
     if (alertasRoja.length > 0) {
-      var textoRoja = state.filterEstado === 'espera'
-        ? 'Mostrando ' + alertasRoja.length + ' registro(s) que vencen pronto. Hacé clic para ver todos.'
+      var textoRoja = state.filterEstado === 'espera' && state.filterVenceDias === 3
+        ? 'Mostrando ' + alertasRoja.length + ' registro(s) que vencen en 3 días o menos. Hacé clic para ver todos.'
         : 'URGENTE: ' + alertasRoja.length + ' registro' + (alertasRoja.length > 1 ? 's' : '') + ' vence' + (alertasRoja.length > 1 ? 'n' : '') + ' en 3 días o menos. Hacé clic para ver.';
-      html += '<div class="alert-banner alert-roja" style="display:flex; cursor:pointer;" id="alerta-vencimiento">';
+      html += '<div class="alert-banner alert-roja" style="display:flex; cursor:pointer; margin-bottom:6px;" id="alerta-urgente">';
       html += '<span>' + textoRoja + '</span>';
       html += '</div>';
-    } else if (alertasAmarilla.length > 0) {
-      var textoAmarilla = state.filterEstado === 'espera'
-        ? 'Mostrando ' + alertasAmarilla.length + ' registro(s) que vencen. Hacé clic para ver todos.'
+    }
+    if (alertasAmarilla.length > 0) {
+      var textoAmarilla = state.filterEstado === 'espera' && state.filterVenceDias === 5
+        ? 'Mostrando ' + alertasAmarilla.length + ' registro(s) que vencen en 5 días. Hacé clic para ver todos.'
         : alertasAmarilla.length + ' registro' + (alertasAmarilla.length > 1 ? 's' : '') + ' vence' + (alertasAmarilla.length > 1 ? 'n' : '') + ' en los próximos 5 días. Hacé clic para ver.';
-      html += '<div class="alert-banner" style="display:flex; cursor:pointer;" id="alerta-vencimiento">';
+      html += '<div class="alert-banner" style="display:flex; cursor:pointer; margin-bottom:6px;" id="alerta-aviso">';
       html += '<span>' + textoAmarilla + '</span>';
       html += '</div>';
     }
@@ -480,19 +481,37 @@ function bindEvents() {
         if (qfi.files.length) handleQuickFiles(qfi.files);
       });
     }
-    var alertaEl = document.getElementById('alerta-vencimiento');
-    if (alertaEl) {
-      alertaEl.addEventListener('click', function () {
-        if (state.filterEstado === 'espera' && state.filterVenceUrgente) {
+    var alertaUrgente = document.getElementById('alerta-urgente');
+    if (alertaUrgente) {
+      alertaUrgente.addEventListener('click', function () {
+        if (state.filterEstado === 'espera' && state.filterVenceDias === 3) {
           state.filterEstado = 'todos';
-          state.filterVenceUrgente = false;
+          state.filterVenceDias = null;
           document.getElementById('estado-filter').value = 'todos';
           showToast('Mostrando todos los registros');
         } else {
           state.filterEstado = 'espera';
-          state.filterVenceUrgente = true;
+          state.filterVenceDias = 3;
           document.getElementById('estado-filter').value = 'espera';
-          showToast('Mostrando solo los que vencen en 3 días o menos');
+          showToast('Mostrando registros que vencen en 3 días o menos');
+        }
+        state.page = 1;
+        render();
+      });
+    }
+    var alertaAviso = document.getElementById('alerta-aviso');
+    if (alertaAviso) {
+      alertaAviso.addEventListener('click', function () {
+        if (state.filterEstado === 'espera' && state.filterVenceDias === 5) {
+          state.filterEstado = 'todos';
+          state.filterVenceDias = null;
+          document.getElementById('estado-filter').value = 'todos';
+          showToast('Mostrando todos los registros');
+        } else {
+          state.filterEstado = 'espera';
+          state.filterVenceDias = 5;
+          document.getElementById('estado-filter').value = 'espera';
+          showToast('Mostrando registros que vencen en 5 días o menos');
         }
         state.page = 1;
         render();
