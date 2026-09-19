@@ -331,7 +331,7 @@ function detailHtml() {
   html += '<div class="card">';
   html += '<div class="detail-header"><div><p class="detail-label">Nota Nº</p><input type="text" id="det-numero" value="' + (n.numero || '') + '" style="border:1px solid var(--border); border-radius:6px; padding:6px 10px; font-family:inherit; font-size:17px; font-weight:700; width:320px;"></div><div style="display:flex; gap:8px; align-items:center;"><select id="det-direccion" style="height:30px; border:1px solid var(--border); border-radius:6px; padding:4px 8px; font-family:inherit; font-size:13px; font-weight:600; background:' + dirBg + '; color:' + dirColor + ';"><option value="Entrada"' + (n.direccion === 'Entrada' ? ' selected' : '') + '>Entrada</option><option value="Salida"' + (n.direccion === 'Salida' ? ' selected' : '') + '>Salida</option></select><select id="det-estado" style="height:30px; border:1px solid var(--border); border-radius:6px; padding:4px 8px; font-family:inherit; font-size:13px; font-weight:600; background:' + (st.cls === 'badge-pendiente' ? 'var(--amber-bg)' : st.cls === 'badge-espera' ? 'var(--coral-bg)' : st.cls === 'badge-cumplido' ? 'var(--green-bg)' : 'var(--indigo-bg)') + '; color:' + (st.cls === 'badge-pendiente' ? 'var(--amber)' : st.cls === 'badge-espera' ? 'var(--coral)' : st.cls === 'badge-cumplido' ? 'var(--green)' : 'var(--indigo)') + ';"><option value="pendiente"' + (n.estado === 'pendiente' ? ' selected' : '') + '>Pendiente</option><option value="espera"' + (n.estado === 'espera' ? ' selected' : '') + '>Espera resp.</option><option value="tomado"' + (n.estado === 'tomado' ? ' selected' : '') + '>Tomado</option><option value="cumplido"' + (n.estado === 'cumplido' ? ' selected' : '') + '>Cumplido</option></select></div></div>';
   html += '<table class="detail-table">';
-  html += '<tr><td>Referencia</td><td><input type="text" id="det-referencia" value="' + (n.referencia || '').replace(/"/g, '"') + '" style="border:1px solid var(--border); border-radius:6px; padding:6px 10px; font-family:inherit; font-size:13.5px; width:100%;"></td></tr>';
+  html += '<tr><td>Referencia</td><td><div id="det-referencia" class="ref-readonly" title="Doble clic para editar">' + (n.referencia || '—') + '</div></td></tr>';
   html += '<tr><td>Fecha</td><td><input type="date" id="det-fecha" value="' + dmyToIso(n.fecha) + '" style="border:1px solid var(--border); border-radius:6px; padding:4px 8px; font-family:inherit; font-size:13px;"></td></tr>';
   html += '<tr><td>Vence respuesta</td><td><input type="date" id="det-fechalimite" value="' + dmyToIso(n.fechaLimite) + '" style="border:1px solid var(--border); border-radius:6px; padding:4px 8px; font-family:inherit; font-size:13px;">' + (n.diasVence !== null && n.fechaLimite ? ' <span class="vence-danger">(' + n.diasVence + ' días)</span>' : '') + '</td></tr>';
   if (n.archivoUrl) {
@@ -676,15 +676,41 @@ function bindEvents() {
         }).catch(function (e) { showToast('Error: ' + e.message); });
       }
     });
-    document.getElementById('det-referencia').addEventListener('blur', function (e) {
+    document.getElementById('det-referencia').addEventListener('dblclick', function (e) {
+      var div = e.target;
       var n = registros.find(function (x) { return x.id === state.selectedId; });
-      var nueva = e.target.value.trim();
-      if (nueva !== n.referencia) {
-        n.referencia = nueva;
-        apiPost('actualizarRegistro', { id: n.id, cambios: { Referencia: nueva } }).then(function () {
-          showToast('Referencia actualizada');
-        }).catch(function (e) { showToast('Error: ' + e.message); });
+      var valorActual = n.referencia || '';
+      div.contentEditable = true;
+      div.className = '';
+      div.style.cssText = 'border:1px solid var(--accent); border-radius:6px; padding:6px 10px; font-family:inherit; font-size:13.5px; min-height:20px; outline:none; background:#fff;';
+      div.textContent = valorActual;
+      div.focus();
+      var sel = window.getSelection();
+      var range = document.createRange();
+      range.selectNodeContents(div);
+      range.collapse(false);
+      sel.removeAllRanges();
+      sel.addRange(range);
+
+      function guardarRef() {
+        div.contentEditable = false;
+        div.className = 'ref-readonly';
+        div.style.cssText = '';
+        div.title = 'Doble clic para editar';
+        var nueva = div.textContent.trim();
+        if (nueva !== valorActual) {
+          n.referencia = nueva;
+          div.textContent = nueva || '—';
+          apiPost('actualizarRegistro', { id: n.id, cambios: { Referencia: nueva } }).then(function () {
+            showToast('Referencia actualizada');
+          }).catch(function (err) { showToast('Error: ' + err.message); });
+        }
       }
+      div.addEventListener('blur', guardarRef, { once: true });
+      div.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); div.blur(); }
+        if (ev.key === 'Escape') { div.textContent = valorActual; div.blur(); }
+      });
     });
     document.getElementById('det-fecha').addEventListener('change', function (e) {
       var n = registros.find(function (x) { return x.id === state.selectedId; });
