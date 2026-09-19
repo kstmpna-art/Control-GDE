@@ -243,3 +243,20 @@
       table th, table td { padding: 7px 8px; font-size: 11.5px; white-space: nowrap; }
       .pagination { flex-wrap: wrap; gap: 6px; }
     }
+
+    .ref-readonly {
+      border: 1px solid transparent;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-family: inherit;
+      font-size: 13.5px;
+      width: 100%;
+      cursor: default;
+      word-break: break-word;
+      line-height: 1.4;
+      transition: background 0.15s;
+    }
+    .ref-readonly:hover {
+      background: var(--surface-alt);
+      cursor: pointer;
+    }
