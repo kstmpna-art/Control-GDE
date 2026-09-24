@@ -1,4 +1,4 @@
-var API_URL = 'https://script.google.com/macros/s/AKfycbwWGRaia1TCmJblf2UGzdrN9ne_HZOSYTAaf5AqGSrqqK737KZHIsm1NJz-bJ_KF3Ca/exec';
+var API_URL = 'https://script.google.com/macros/s/AKfycbztAB6nwxDmDnYbCn70aFdI0rYoSCepRI7mOxn-C8AsiEccEhYrCIZSQOiCPLR7dYaE/exec';
 var registros = [];
 var cargando = false;
 var state = { view: 'list', tab: 'panel', selectedId: null, previousSelectedId: null, filterText: '', filterEstado: 'todos', filterVenceDias: null, filterFechaDesde: '', filterFechaHasta: '', page: 1, perPage: 20, sortColumn: 'fecha', sortDirection: 'desc' };
@@ -78,6 +78,8 @@ function cargarRegistros() {
       registros = data;
       render();
       detectarYEnviarAlertas();
+    } else if (data && data.error) {
+      showToast('Error del servidor: ' + data.error);
     } else {
       showToast('Error: respuesta inesperada del servidor');
     }
@@ -631,7 +633,16 @@ function bindEvents() {
       input.addEventListener('change', function () {
         if (!input.files.length) return;
         var destId = input.getAttribute('data-id');
-        fileToBase64(input.files[0], function (archivoData) {
+        var file = input.files[0];
+        fileToBase64(file, async function (archivoData) {
+          var duplicados = await apiPost('verificarArchivoDuplicado', { nombreArchivo: file.name });
+          if (duplicados && duplicados.length > 0) {
+            var fechaDup = new Date(duplicados[0].fecha).toLocaleDateString('es-AR');
+            if (!confirm('Ya existe un archivo llamado "' + file.name + '" en Drive (subido el ' + fechaDup + ').\n\n¿Desea subir de todas formas?')) {
+              input.value = '';
+              return;
+            }
+          }
           showToast('Subiendo respuesta...');
           apiPost('marcarRespuestaDestinatario', { destinatarioId: destId, archivo: archivoData }).then(function () {
             showToast('Respuesta registrada');
@@ -849,10 +860,20 @@ async function handleQuickFiles(fileList) {
   var total = files.length;
   var procesados = 0;
   var errores = 0;
+  var omitidos = 0;
   for (var i = 0; i < total; i++) {
     var file = files[i];
     showToast('Procesando ' + (i + 1) + ' de ' + total + ': ' + file.name);
     try {
+      var duplicados = await apiPost('verificarArchivoDuplicado', { nombreArchivo: file.name });
+      if (duplicados && duplicados.length > 0) {
+        var fechaDup = new Date(duplicados[0].fecha).toLocaleDateString('es-AR');
+        if (!confirm('Ya existe un archivo llamado "' + file.name + '" en Drive (subido el ' + fechaDup + ').\n\n¿Desea reemplazarlo?')) {
+          omitidos++;
+          showToast('Omitido: ' + file.name);
+          continue;
+        }
+      }
       await new Promise(function (resolve, reject) {
         fileToBase64(file, async function (archivoData) {
           try {
@@ -880,7 +901,9 @@ async function handleQuickFiles(fileList) {
     }
   }
   if (errores > 0) {
-    showToast(procesados + ' ok, ' + errores + ' con error');
+    showToast(procesados + ' ok, ' + errores + ' con error, ' + omitidos + ' omitidos');
+  } else if (omitidos > 0) {
+    showToast(procesados + ' procesados, ' + omitidos + ' omitidos');
   } else {
     showToast(total + ' archivos procesados.');
   }
@@ -946,7 +969,17 @@ document.getElementById('save-modal-btn').addEventListener('click', async functi
   var fecha = fechaRaw ? isoToDmy(fechaRaw) : '';
 
   var fileInput = document.getElementById('f-archivo');
-  function procesarGuardado(archData) {
+  async function procesarGuardado(archData) {
+    if (archData && archData.nombre) {
+      var duplicados = await apiPost('verificarArchivoDuplicado', { nombreArchivo: archData.nombre });
+      if (duplicados && duplicados.length > 0) {
+        var fechaDup = new Date(duplicados[0].fecha).toLocaleDateString('es-AR');
+        if (!confirm('Ya existe un archivo llamado "' + archData.nombre + '" en Drive (subido el ' + fechaDup + ').\n\n¿Desea reemplazarlo?')) {
+          showToast('Se canceló el guardado');
+          return;
+        }
+      }
+    }
     apiGet('existeNumero', { numero: numero }).then(function (existe) {
       if (existe) {
         if (confirm('Ya existe un registro con el número ' + numero + '. ¿Desea reemplazarlo?')) {
