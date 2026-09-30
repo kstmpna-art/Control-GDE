@@ -156,17 +156,23 @@ function filteredRegistros() {
   filtered.sort(function (a, b) {
     var valA, valB;
     if (state.sortColumn === 'fecha') {
+      if (!a.fecha && !b.fecha) return 0;
+      if (!a.fecha) return -1;
+      if (!b.fecha) return 1;
       valA = parseFecha(a.fecha);
       valB = parseFecha(b.fecha);
     } else if (state.sortColumn === 'fechaLimite') {
+      if (!a.fechaLimite && !b.fechaLimite) return 0;
+      if (!a.fechaLimite) return -1;
+      if (!b.fechaLimite) return 1;
       valA = parseFecha(a.fechaLimite);
       valB = parseFecha(b.fechaLimite);
     } else {
       return 0;
     }
     if (!valA && !valB) return 0;
-    if (!valA) return state.sortDirection === 'asc' ? -1 : 1;
-    if (!valB) return state.sortDirection === 'asc' ? 1 : -1;
+    if (!valA) return -1;
+    if (!valB) return 1;
     var cmp = valA - valB;
     return state.sortDirection === 'asc' ? cmp : -cmp;
   });
