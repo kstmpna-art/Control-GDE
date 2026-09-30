@@ -84,7 +84,7 @@
       background: var(--coral-bg); color: var(--coral);
     }
 
-    .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px; margin-bottom: 22px; }
     .kpi-card {
       background: var(--surface); border-radius: var(--radius); padding: 16px 18px;
       box-shadow: var(--shadow);
@@ -135,6 +135,7 @@
     .badge-espera { background: var(--coral-bg); color: var(--coral); }
     .badge-cumplido { background: var(--green-bg); color: var(--green); }
     .badge-tomado { background: var(--indigo-bg); color: var(--indigo); }
+    .badge-firmado { background: #E0F2F1; color: #00695C; }
     .badge-entrada { background: var(--accent-bg); color: var(--accent-dark); }
     .badge-salida { background: var(--surface-alt); color: var(--ink-soft); }
     .btn-danger {
