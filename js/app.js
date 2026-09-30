@@ -1,7 +1,7 @@
 var API_URL = 'https://script.google.com/macros/s/AKfycbztAB6nwxDmDnYbCn70aFdI0rYoSCepRI7mOxn-C8AsiEccEhYrCIZSQOiCPLR7dYaE/exec';
 var registros = [];
 var cargando = false;
-var state = { view: 'list', tab: 'panel', selectedId: null, previousSelectedId: null, filterText: '', filterEstado: 'todos', filterVenceDias: null, filterFechaDesde: '', filterFechaHasta: '', page: 1, perPage: 20, sortColumn: 'fecha', sortDirection: 'desc' };
+var state = { view: 'list', tab: 'panel', selectedId: null, previousSelectedId: null, filterText: '', filterEstado: 'todos', filterVenceDias: null, filterArchivos: false, filterFechaDesde: '', filterFechaHasta: '', page: 1, perPage: 20, sortColumn: 'fecha', sortDirection: 'desc' };
 
 function showToast(msg) {
   var t = document.getElementById('toast');
@@ -115,6 +115,7 @@ function estadoInfo(e) {
   if (e === 'pendiente') return { cls: 'badge-pendiente', label: 'Pendiente' };
   if (e === 'espera') return { cls: 'badge-espera', label: 'Espera resp.' };
   if (e === 'cumplido') return { cls: 'badge-cumplido', label: 'Cumplido' };
+  if (e === 'firmado') return { cls: 'badge-firmado', label: 'Firmado' };
   return { cls: 'badge-tomado', label: 'Tom. conoc.' };
 }
 
@@ -131,6 +132,10 @@ function filteredRegistros() {
       (n.referencia || '').toLowerCase().indexOf(t) > -1 ||
       (n.observaciones || '').toLowerCase().indexOf(t) > -1;
     var matchEstado = state.filterEstado === 'todos' || n.estado === state.filterEstado;
+    if (state.filterArchivos) {
+      var tieneArchivo = n.archivoUrl || (n.destinatarios || []).some(function (d) { return d.archivoUrl; });
+      if (!tieneArchivo) return false;
+    }
     if (state.filterVenceDias) {
       matchEstado = matchEstado && n.estado === 'espera' && n.diasVence !== null && n.diasVence <= state.filterVenceDias && n.diasVence >= 0;
     }
@@ -178,7 +183,7 @@ function render() {
 function listHtml() {
   var alertasRoja = registros.filter(function (n) { return n.estado === 'espera' && n.diasVence !== null && n.diasVence <= 3 && n.diasVence >= 0; });
   var alertasAmarilla = registros.filter(function (n) { return n.estado === 'espera' && n.diasVence !== null && n.diasVence <= 5 && n.diasVence > 3; });
-  var counts = { pendiente: 0, espera: 0, cumplido: 0, tomado: 0 };
+  var counts = { pendiente: 0, espera: 0, cumplido: 0, tomado: 0, firmado: 0 };
   registros.forEach(function (n) { if (counts[n.estado] !== undefined) counts[n.estado]++; });
 
   var html = '';
@@ -204,12 +209,19 @@ function listHtml() {
     html += kpiCard('Espera de respuesta', counts.espera, 'espera');
     html += kpiCard('Cumplidos', counts.cumplido, 'cumplido');
     html += kpiCard('Tomado conocimiento', counts.tomado, 'tomado');
+    html += kpiCard('Firmados', counts.firmado, 'firmado');
+    var totalArchivos = 0;
+    registros.forEach(function (n) {
+      if (n.archivoUrl) totalArchivos++;
+      (n.destinatarios || []).forEach(function (d) { if (d.archivoUrl) totalArchivos++; });
+    });
+    html += kpiCard('Total archivos', totalArchivos, 'total-archivos');
     html += '</div>';
   }
   html += '<div class="toolbar">';
   html += '<input type="text" id="search-input" placeholder="Buscar por número, asunto u observaciones" value="' + state.filterText + '">';
   html += '<select id="estado-filter">';
-  ['todos', 'pendiente', 'espera', 'cumplido', 'tomado'].forEach(function (e) {
+  ['todos', 'pendiente', 'espera', 'cumplido', 'tomado', 'firmado'].forEach(function (e) {
     var label = e === 'todos' ? 'Todos los estados' : estadoInfo(e).label;
     html += '<option value="' + e + '"' + (state.filterEstado === e ? ' selected' : '') + '>' + label + '</option>';
   });
@@ -232,12 +244,14 @@ html += '<button class="btn btn-success" id="refresh-btn">Actualizar</button>';
 }
 
 function kpiCard(label, value, estado) {
-  var isActive = state.filterEstado === estado;
+  var isActive = estado === 'total-archivos' ? state.filterArchivos : state.filterEstado === estado;
   var colors = {
     pendiente: { bg: 'var(--amber-bg)', border: 'var(--amber)', icon: '&#9888;' },
     espera: { bg: 'var(--coral-bg)', border: 'var(--coral)', icon: '&#8987;' },
     cumplido: { bg: 'var(--green-bg)', border: 'var(--green)', icon: '&#10003;' },
-    tomado: { bg: 'var(--indigo-bg)', border: 'var(--indigo)', icon: '&#128203;' }
+    tomado: { bg: 'var(--indigo-bg)', border: 'var(--indigo)', icon: '&#128203;' },
+    firmado: { bg: '#E0F2F1', border: '#00695C', icon: '&#9997;' },
+    'total-archivos': { bg: '#FFF3E0', border: '#E65100', icon: '&#128196;' }
   };
   var c = colors[estado] || { bg: 'var(--surface)', border: 'var(--border)', icon: '' };
   var activeStyle = isActive ? 'border:2px solid ' + c.border + ';' : 'border:2px solid transparent;';
@@ -281,7 +295,7 @@ function tableHtml() {
     html += '<td style="color:var(--ink-soft);">' + n.fecha + '</td>';
     html += '<td><select class="direccion-rapido" data-id="' + n.id + '" style="height:26px; border:1px solid var(--border); border-radius:5px; padding:2px 4px; font-size:11.5px; font-family:inherit; background:' + dirBg + '; color:' + dirColor + ';"><option value="Entrada"' + (n.direccion === 'Entrada' ? ' selected' : '') + '>Entrada</option><option value="Salida"' + (n.direccion === 'Salida' ? ' selected' : '') + '>Salida</option></select></td>';
     html += '<td>' + (n.referencia || '') + '</td>';
-    html += '<td><select class="estado-rapido" data-id="' + n.id + '" style="height:26px; border:1px solid var(--border); border-radius:5px; padding:2px 4px; font-size:11.5px; font-family:inherit; background:' + (st.cls === 'badge-pendiente' ? 'var(--amber-bg)' : st.cls === 'badge-espera' ? 'var(--coral-bg)' : st.cls === 'badge-cumplido' ? 'var(--green-bg)' : 'var(--indigo-bg)') + '; color:' + (st.cls === 'badge-pendiente' ? 'var(--amber)' : st.cls === 'badge-espera' ? 'var(--coral)' : st.cls === 'badge-cumplido' ? 'var(--green)' : 'var(--indigo)') + ';"><option value="pendiente"' + (n.estado === 'pendiente' ? ' selected' : '') + '>Pendiente</option><option value="espera"' + (n.estado === 'espera' ? ' selected' : '') + '>Espera</option><option value="tomado"' + (n.estado === 'tomado' ? ' selected' : '') + '>Tomado</option><option value="cumplido"' + (n.estado === 'cumplido' ? ' selected' : '') + '>Cumplido</option></select></td>';
+    html += '<td><select class="estado-rapido" data-id="' + n.id + '" style="height:26px; border:1px solid var(--border); border-radius:5px; padding:2px 4px; font-size:11.5px; font-family:inherit; background:' + (st.cls === 'badge-pendiente' ? 'var(--amber-bg)' : st.cls === 'badge-espera' ? 'var(--coral-bg)' : st.cls === 'badge-cumplido' ? 'var(--green-bg)' : st.cls === 'badge-firmado' ? '#E0F2F1' : 'var(--indigo-bg)') + '; color:' + (st.cls === 'badge-pendiente' ? 'var(--amber)' : st.cls === 'badge-espera' ? 'var(--coral)' : st.cls === 'badge-cumplido' ? 'var(--green)' : st.cls === 'badge-firmado' ? '#00695C' : 'var(--indigo)') + ';"><option value="pendiente"' + (n.estado === 'pendiente' ? ' selected' : '') + '>Pendiente</option><option value="espera"' + (n.estado === 'espera' ? ' selected' : '') + '>Espera</option><option value="tomado"' + (n.estado === 'tomado' ? ' selected' : '') + '>Tomado</option><option value="cumplido"' + (n.estado === 'cumplido' ? ' selected' : '') + '>Cumplido</option><option value="firmado"' + (n.estado === 'firmado' ? ' selected' : '') + '>Firmado</option></select></td>';
     html += '<td>' + vence + '</td>';
     html += '<td style="color:var(--ink-soft);">' + (n.observaciones || '—') + '</td>';
     html += '</tr>';
@@ -331,7 +345,7 @@ function detailHtml() {
   html += '</div>';
   html += '</div>';
   html += '<div class="card">';
-  html += '<div class="detail-header"><div><p class="detail-label">Nota Nº</p><input type="text" id="det-numero" value="' + (n.numero || '') + '" style="border:1px solid var(--border); border-radius:6px; padding:6px 10px; font-family:inherit; font-size:17px; font-weight:700; width:320px;"></div><div style="display:flex; gap:8px; align-items:center;"><select id="det-direccion" style="height:30px; border:1px solid var(--border); border-radius:6px; padding:4px 8px; font-family:inherit; font-size:13px; font-weight:600; background:' + dirBg + '; color:' + dirColor + ';"><option value="Entrada"' + (n.direccion === 'Entrada' ? ' selected' : '') + '>Entrada</option><option value="Salida"' + (n.direccion === 'Salida' ? ' selected' : '') + '>Salida</option></select><select id="det-estado" style="height:30px; border:1px solid var(--border); border-radius:6px; padding:4px 8px; font-family:inherit; font-size:13px; font-weight:600; background:' + (st.cls === 'badge-pendiente' ? 'var(--amber-bg)' : st.cls === 'badge-espera' ? 'var(--coral-bg)' : st.cls === 'badge-cumplido' ? 'var(--green-bg)' : 'var(--indigo-bg)') + '; color:' + (st.cls === 'badge-pendiente' ? 'var(--amber)' : st.cls === 'badge-espera' ? 'var(--coral)' : st.cls === 'badge-cumplido' ? 'var(--green)' : 'var(--indigo)') + ';"><option value="pendiente"' + (n.estado === 'pendiente' ? ' selected' : '') + '>Pendiente</option><option value="espera"' + (n.estado === 'espera' ? ' selected' : '') + '>Espera resp.</option><option value="tomado"' + (n.estado === 'tomado' ? ' selected' : '') + '>Tomado</option><option value="cumplido"' + (n.estado === 'cumplido' ? ' selected' : '') + '>Cumplido</option></select></div></div>';
+  html += '<div class="detail-header"><div><p class="detail-label">Nota Nº</p><input type="text" id="det-numero" value="' + (n.numero || '') + '" style="border:1px solid var(--border); border-radius:6px; padding:6px 10px; font-family:inherit; font-size:17px; font-weight:700; width:320px;"></div><div style="display:flex; gap:8px; align-items:center;"><select id="det-direccion" style="height:30px; border:1px solid var(--border); border-radius:6px; padding:4px 8px; font-family:inherit; font-size:13px; font-weight:600; background:' + dirBg + '; color:' + dirColor + ';"><option value="Entrada"' + (n.direccion === 'Entrada' ? ' selected' : '') + '>Entrada</option><option value="Salida"' + (n.direccion === 'Salida' ? ' selected' : '') + '>Salida</option></select><select id="det-estado" style="height:30px; border:1px solid var(--border); border-radius:6px; padding:4px 8px; font-family:inherit; font-size:13px; font-weight:600; background:' + (st.cls === 'badge-pendiente' ? 'var(--amber-bg)' : st.cls === 'badge-espera' ? 'var(--coral-bg)' : st.cls === 'badge-cumplido' ? 'var(--green-bg)' : st.cls === 'badge-firmado' ? '#E0F2F1' : 'var(--indigo-bg)') + '; color:' + (st.cls === 'badge-pendiente' ? 'var(--amber)' : st.cls === 'badge-espera' ? 'var(--coral)' : st.cls === 'badge-cumplido' ? 'var(--green)' : st.cls === 'badge-firmado' ? '#00695C' : 'var(--indigo)') + ';"><option value="pendiente"' + (n.estado === 'pendiente' ? ' selected' : '') + '>Pendiente</option><option value="espera"' + (n.estado === 'espera' ? ' selected' : '') + '>Espera resp.</option><option value="tomado"' + (n.estado === 'tomado' ? ' selected' : '') + '>Tomado</option><option value="cumplido"' + (n.estado === 'cumplido' ? ' selected' : '') + '>Cumplido</option><option value="firmado"' + (n.estado === 'firmado' ? ' selected' : '') + '>Firmado</option></select></div></div>';
   html += '<table class="detail-table">';
   html += '<tr><td>Referencia</td><td><div id="det-referencia" class="ref-readonly" title="Doble clic para editar">' + (n.referencia || '—') + '</div></td></tr>';
   html += '<tr><td>Fecha</td><td><input type="date" id="det-fecha" value="' + dmyToIso(n.fecha) + '" style="border:1px solid var(--border); border-radius:6px; padding:4px 8px; font-family:inherit; font-size:13px;"></td></tr>';
@@ -455,9 +469,21 @@ function bindEvents() {
     document.querySelectorAll('.kpi-card').forEach(function (card) {
       card.addEventListener('click', function () {
         var estado = card.getAttribute('data-estado');
-        state.filterEstado = estado;
+        if (estado === 'total-archivos') {
+          state.filterArchivos = !state.filterArchivos;
+          state.filterEstado = 'todos';
+          state.filterVenceDias = null;
+          document.getElementById('estado-filter').value = 'todos';
+        } else if (state.filterEstado === estado && !state.filterArchivos) {
+          state.filterEstado = 'todos';
+          document.getElementById('estado-filter').value = 'todos';
+        } else {
+          state.filterEstado = estado;
+          state.filterArchivos = false;
+          state.filterVenceDias = null;
+          document.getElementById('estado-filter').value = estado;
+        }
         state.page = 1;
-        document.getElementById('estado-filter').value = estado;
         render();
       });
     });
@@ -865,24 +891,25 @@ async function handleQuickFiles(fileList) {
     var file = files[i];
     showToast('Procesando ' + (i + 1) + ' de ' + total + ': ' + file.name);
     try {
-      var duplicados = await apiPost('verificarArchivoDuplicado', { nombreArchivo: file.name });
-      if (duplicados && duplicados.length > 0) {
-        var fechaDup = new Date(duplicados[0].fecha).toLocaleDateString('es-AR');
-        if (!confirm('Ya existe un archivo llamado "' + file.name + '" en Drive (subido el ' + fechaDup + ').\n\n¿Desea reemplazarlo?')) {
-          omitidos++;
-          showToast('Omitido: ' + file.name);
-          continue;
-        }
-      }
       await new Promise(function (resolve, reject) {
         fileToBase64(file, async function (archivoData) {
           try {
             var res = await apiPost('crearRegistroDesdeArchivo', { archivo: archivoData, direccion: 'Entrada', creadoPor: localStorage.getItem('usuario_nombre') || '' });
+            if (res.duplicadoDrive) {
+              var fechaDup = new Date(res.archivoExistente.fecha).toLocaleDateString('es-AR');
+              if (!confirm('Ya existe un archivo llamado "' + file.name + '" en Drive (subido el ' + fechaDup + ').\n\n¿Desea reemplazarlo?')) {
+                omitidos++;
+                showToast('Omitido: ' + file.name);
+                resolve();
+                return;
+              }
+              res = await apiPost('crearRegistroDesdeArchivo', { archivo: archivoData, direccion: 'Entrada', creadoPor: localStorage.getItem('usuario_nombre') || '', forzar: true });
+            }
             if (res.duplicado) {
               if (confirm('Ya existe un registro con el número ' + res.numero + '. ¿Desea reemplazarlo?')) {
                 await apiPost('eliminarRegistroPorNumero', { numero: res.numero });
                 showToast('Registro anterior eliminado, creando nuevo...');
-                await apiPost('crearRegistroDesdeArchivo', { archivo: archivoData, direccion: 'Entrada', creadoPor: localStorage.getItem('usuario_nombre') || '' });
+                await apiPost('crearRegistroDesdeArchivo', { archivo: archivoData, direccion: 'Entrada', creadoPor: localStorage.getItem('usuario_nombre') || '', forzar: true });
               } else {
                 showToast('Se omitió: ' + res.numero);
               }
@@ -1209,7 +1236,7 @@ function fechaHoraExportacion() {
 }
 
 function estadoLabel(estado) {
-  var labels = { pendiente: 'Pendiente', espera: 'Espera resp.', cumplido: 'Cumplido', tomado: 'Tom. conoc.' };
+  var labels = { pendiente: 'Pendiente', espera: 'Espera resp.', cumplido: 'Cumplido', tomado: 'Tom. conoc.', firmado: 'Firmado' };
   return labels[estado] || estado;
 }
 
