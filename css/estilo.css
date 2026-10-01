@@ -136,8 +136,8 @@
     .badge-cumplido { background: var(--green-bg); color: var(--green); }
     .badge-tomado { background: var(--indigo-bg); color: var(--indigo); }
     .badge-firmado { background: #E0F2F1; color: #00695C; }
-    .badge-entrada { background: var(--accent-bg); color: var(--accent-dark); }
-    .badge-salida { background: var(--surface-alt); color: var(--ink-soft); }
+    .badge-entrada { background: #43A047; color: #fff; }
+    .badge-salida { background: #8E24AA; color: #fff; }
     .btn-danger {
       background: var(--coral-bg); color: var(--coral); border: 1px solid transparent;
       height: 36px; padding: 0 14px; border-radius: 8px; font-size: 13px; cursor: pointer;
