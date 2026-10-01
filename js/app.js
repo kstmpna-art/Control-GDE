@@ -1,4 +1,4 @@
-var API_URL = 'https://script.google.com/macros/s/AKfycbztAB6nwxDmDnYbCn70aFdI0rYoSCepRI7mOxn-C8AsiEccEhYrCIZSQOiCPLR7dYaE/exec';
+var API_URL = 'https://script.google.com/macros/s/AKfycbybL3vV5KrC4diqmmPeqK3ggDpXvfRnNTCHn73Ai9gUynstyiKWs53-XnkyS4OE-zmB/exec';
 var registros = [];
 var cargando = false;
 var state = { view: 'list', tab: 'panel', selectedId: null, previousSelectedId: null, filterText: '', filterEstado: 'todos', filterVenceDias: null, filterArchivos: false, filterFechaDesde: '', filterFechaHasta: '', page: 1, perPage: 20, sortColumn: 'fecha', sortDirection: 'desc' };
@@ -292,8 +292,8 @@ function tableHtml() {
   rows.forEach(function (n) {
     var st = estadoInfo(n.estado);
     var vence = n.fechaLimite ? '<span class="' + (n.diasVence !== null && n.diasVence <= 5 ? 'vence-danger' : 'vence-normal') + '">' + n.fechaLimite + '</span>' : '<span class="vence-normal">—</span>';
-    var dirBg = n.direccion === 'Salida' ? 'var(--surface-alt)' : 'var(--accent-bg)';
-    var dirColor = n.direccion === 'Salida' ? 'var(--ink-soft)' : 'var(--accent-dark)';
+    var dirBg = n.direccion === 'Salida' ? '#8E24AA' : '#43A047';
+    var dirColor = n.direccion === 'Salida' ? '#fff' : '#fff';
     var rowBg = n.estado === 'cumplido' ? 'var(--green-bg)' : (n.estado === 'espera' ? 'var(--coral-bg)' : '');
     var rowStyle = rowBg ? ' style="background:' + rowBg + ';"' : '';
     html += '<tr class="note-row" data-id="' + n.id + '"' + rowStyle + '>';
@@ -333,8 +333,8 @@ function detailHtml() {
   var st = estadoInfo(n.estado);
   var contestaron = n.destinatarios.filter(function (d) { return d.estado === 'cumplido'; }).length;
 
-  var dirBg = n.direccion === 'Salida' ? 'var(--surface-alt)' : 'var(--accent-bg)';
-  var dirColor = n.direccion === 'Salida' ? 'var(--ink-soft)' : 'var(--accent-dark)';
+  var dirBg = n.direccion === 'Salida' ? '#8E24AA' : '#43A047';
+  var dirColor = n.direccion === 'Salida' ? '#fff' : '#fff';
   var html = '<div style="display:flex; justify-content:space-between; align-items:center;">';
   html += '<div style="display:flex; gap:12px; align-items:center;">';
   html += '<div class="back-link" id="back-btn">&#8592; Volver al listado</div>';
@@ -445,6 +445,78 @@ function fileToBase64(file, cb) {
     cb({ base64: base64, nombre: file.name, tipo: file.type || 'application/octet-stream' });
   };
   reader.readAsDataURL(file);
+}
+
+async function extraerTextoPDF(file) {
+  if (!window.pdfjsLib) return '';
+  if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) return '';
+  try {
+    var buf = await file.arrayBuffer();
+    var pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    var texto = '';
+    for (var i = 1; i <= pdf.numPages; i++) {
+      var page = await pdf.getPage(i);
+      var content = await page.getTextContent();
+      texto += content.items.map(function (it) { return it.str; }).join(' ') + '\n';
+    }
+    return texto;
+  } catch (e) {
+    return '';
+  }
+}
+
+function parsearTextoFrontend(texto) {
+  var resultado = { numero: '', referencia: '', fecha: '', fechaLimite: '' };
+  if (!texto) return resultado;
+  var meses = { enero: 1, febrero: 2, marzo: 3, abril: 4, mayo: 5, junio: 6, julio: 7, agosto: 8,
+    septiembre: 9, setiembre: 9, octubre: 10, noviembre: 11, diciembre: 12 };
+  var t = texto.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  var lineas = t.split('\n');
+
+  var mNumero = t.match(/N[uú]mero\s*:\s*([A-Z]{2,4}-\d{4}-\d{5,}[-#%A-Z]*)/i);
+  if (mNumero && mNumero[1].trim()) {
+    resultado.numero = mNumero[1].replace(/%/g, '#').replace(/\s+/g, '').trim();
+  }
+  if (!resultado.numero) {
+    var mNum2 = t.match(/N[uú]mero\s*:\s*([^\n]*?)(?=\s*Referencia|\s*Asunto|\s*\n)/i);
+    if (mNum2 && mNum2[1].trim() && !mNum2[1].match(/Referencia|Asunto/i)) {
+      resultado.numero = mNum2[1].replace(/%/g, '#').replace(/\s+/g, '').trim();
+    }
+  }
+
+  var capturando = false;
+  var refLineas = [];
+  for (var i = 0; i < lineas.length; i++) {
+    var lin = lineas[i].trim();
+    if (/^Referencia\s*:/i.test(lin) || /^Asunto\s*:/i.test(lin)) {
+      capturando = true;
+      var despues = lin.replace(/^Referencia\s*:\s*/i, '').replace(/^Asunto\s*:\s*/i, '').trim();
+      if (despues) refLineas.push(despues);
+      continue;
+    }
+    if (capturando) {
+      if (/^A\s*:/i.test(lin) || /^Con Copia/i.test(lin) || /^De mi/i.test(lin)) break;
+      if (lin === '') break;
+      refLineas.push(lin);
+    }
+  }
+  if (refLineas.length > 0) {
+    resultado.referencia = refLineas.join(' ').replace(/\s+/g, ' ').trim().substring(0, 200);
+  }
+
+  var mFecha = t.match(/(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\s+de\s+(\d{4})/i);
+  if (mFecha) {
+    var mes = meses[mFecha[2].toLowerCase()] || 0;
+    resultado.fecha = ('0' + mFecha[1]).slice(-2) + '/' + ('0' + mes).slice(-2) + '/' + mFecha[3];
+  }
+
+  var mLimite = t.match(/(?:vence|vencimiento|fecha\s+l[ií]mite|plazo)\s*(?:el|:)?\s*(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\s+de\s+(\d{4})/i);
+  if (mLimite) {
+    var mesL = meses[mLimite[2].toLowerCase()] || 0;
+    resultado.fechaLimite = ('0' + mLimite[1]).slice(-2) + '/' + ('0' + mesL).slice(-2) + '/' + mLimite[3];
+  }
+
+  return resultado;
 }
 
 function bindEvents() {
@@ -897,10 +969,12 @@ async function handleQuickFiles(fileList) {
     var file = files[i];
     showToast('Procesando ' + (i + 1) + ' de ' + total + ': ' + file.name);
     try {
+      var textoPDF = await extraerTextoPDF(file);
+      var datosExtraidos = parsearTextoFrontend(textoPDF);
       await new Promise(function (resolve, reject) {
         fileToBase64(file, async function (archivoData) {
           try {
-            var res = await apiPost('crearRegistroDesdeArchivo', { archivo: archivoData, direccion: 'Entrada', creadoPor: localStorage.getItem('usuario_nombre') || '' });
+            var res = await apiPost('crearRegistroDesdeArchivo', { archivo: archivoData, direccion: 'Entrada', creadoPor: localStorage.getItem('usuario_nombre') || '', datosExtraidos: datosExtraidos });
             if (res.duplicadoDrive) {
               var fechaDup = new Date(res.archivoExistente.fecha).toLocaleDateString('es-AR');
               if (!confirm('Ya existe un archivo llamado "' + file.name + '" en Drive (subido el ' + fechaDup + ').\n\n¿Desea reemplazarlo?')) {
@@ -909,13 +983,13 @@ async function handleQuickFiles(fileList) {
                 resolve();
                 return;
               }
-              res = await apiPost('crearRegistroDesdeArchivo', { archivo: archivoData, direccion: 'Entrada', creadoPor: localStorage.getItem('usuario_nombre') || '', forzar: true });
+              res = await apiPost('crearRegistroDesdeArchivo', { archivo: archivoData, direccion: 'Entrada', creadoPor: localStorage.getItem('usuario_nombre') || '', forzar: true, datosExtraidos: datosExtraidos });
             }
             if (res.duplicado) {
               if (confirm('Ya existe un registro con el número ' + res.numero + '. ¿Desea reemplazarlo?')) {
                 await apiPost('eliminarRegistroPorNumero', { numero: res.numero });
                 showToast('Registro anterior eliminado, creando nuevo...');
-                await apiPost('crearRegistroDesdeArchivo', { archivo: archivoData, direccion: 'Entrada', creadoPor: localStorage.getItem('usuario_nombre') || '', forzar: true });
+                await apiPost('crearRegistroDesdeArchivo', { archivo: archivoData, direccion: 'Entrada', creadoPor: localStorage.getItem('usuario_nombre') || '', forzar: true, datosExtraidos: datosExtraidos });
               } else {
                 showToast('Se omitió: ' + res.numero);
               }
