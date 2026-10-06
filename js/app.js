@@ -1,7 +1,7 @@
 var API_URL = 'https://script.google.com/macros/s/AKfycbybL3vV5KrC4diqmmPeqK3ggDpXvfRnNTCHn73Ai9gUynstyiKWs53-XnkyS4OE-zmB/exec';
 var registros = [];
 var cargando = false;
-var state = { view: 'list', tab: 'panel', selectedId: null, previousSelectedId: null, filterText: '', filterEstado: 'todos', filterVenceDias: null, filterArchivos: false, filterFechaDesde: '', filterFechaHasta: '', page: 1, perPage: 20, sortColumn: 'fecha', sortDirection: 'desc' };
+var state = { view: 'list', tab: 'panel', selectedId: null, previousSelectedId: null, filterText: '', filterEstado: 'todos', filterVenceDias: null, filterArchivos: false, filterRefEx: false, filterFechaDesde: '', filterFechaHasta: '', page: 1, perPage: 20, sortColumn: 'fecha', sortDirection: 'desc' };
 
 function showToast(msg) {
   var t = document.getElementById('toast');
@@ -116,6 +116,8 @@ function estadoInfo(e) {
   if (e === 'espera') return { cls: 'badge-espera', label: 'Espera resp.' };
   if (e === 'cumplido') return { cls: 'badge-cumplido', label: 'Cumplido' };
   if (e === 'firmado') return { cls: 'badge-firmado', label: 'Firmado' };
+  if (e === 'finalizado') return { cls: 'badge-finalizado', label: 'Finalizado' };
+  if (e === 'en_tramite') return { cls: 'badge-en-tramite', label: 'En trámite' };
   return { cls: 'badge-tomado', label: 'Tom. conoc.' };
 }
 
@@ -135,6 +137,9 @@ function filteredRegistros() {
     if (state.filterArchivos) {
       var tieneArchivo = n.archivoUrl || (n.destinatarios || []).some(function (d) { return d.archivoUrl; });
       if (!tieneArchivo) return false;
+    }
+    if (state.filterRefEx) {
+      if (n.direccion !== 'Expediente') return false;
     }
     if (state.filterVenceDias) {
       matchEstado = matchEstado && n.estado === 'espera' && n.diasVence !== null && n.diasVence <= state.filterVenceDias && n.diasVence >= 0;
@@ -189,7 +194,7 @@ function render() {
 function listHtml() {
   var alertasRoja = registros.filter(function (n) { return n.estado === 'espera' && n.diasVence !== null && n.diasVence <= 3 && n.diasVence >= 0; });
   var alertasAmarilla = registros.filter(function (n) { return n.estado === 'espera' && n.diasVence !== null && n.diasVence <= 5 && n.diasVence > 3; });
-  var counts = { pendiente: 0, espera: 0, cumplido: 0, tomado: 0, firmado: 0 };
+  var counts = { pendiente: 0, espera: 0, cumplido: 0, tomado: 0, firmado: 0, finalizado: 0, en_tramite: 0 };
   registros.forEach(function (n) { if (counts[n.estado] !== undefined) counts[n.estado]++; });
 
   var html = '';
@@ -216,18 +221,22 @@ function listHtml() {
     html += kpiCard('Cumplidos', counts.cumplido, 'cumplido');
     html += kpiCard('Tomado conocimiento', counts.tomado, 'tomado');
     html += kpiCard('Firmados', counts.firmado, 'firmado');
+    var totalEx = registros.filter(function (n) { return n.direccion === 'Expediente'; }).length;
+    html += kpiCard('Expedientes', totalEx, 'ref-ex');
+    html += kpiCard('En trámite', counts.en_tramite, 'en_tramite');
+    html += kpiCard('Finalizados', counts.finalizado, 'finalizado');
     var totalArchivos = 0;
     registros.forEach(function (n) {
       if (n.archivoUrl) totalArchivos++;
       (n.destinatarios || []).forEach(function (d) { if (d.archivoUrl) totalArchivos++; });
     });
-    html += kpiCard('Total archivos', totalArchivos, 'total-archivos');
+    html += kpiCard('Total archivos', totalArchivos, 'total-archivos', true);
     html += '</div>';
   }
   html += '<div class="toolbar">';
   html += '<input type="text" id="search-input" placeholder="Buscar por número, asunto u observaciones" value="' + state.filterText + '">';
   html += '<select id="estado-filter">';
-  ['todos', 'pendiente', 'espera', 'cumplido', 'tomado', 'firmado'].forEach(function (e) {
+  ['todos', 'pendiente', 'espera', 'cumplido', 'tomado', 'firmado', 'finalizado', 'en_tramite'].forEach(function (e) {
     var label = e === 'todos' ? 'Todos los estados' : estadoInfo(e).label;
     html += '<option value="' + e + '"' + (state.filterEstado === e ? ' selected' : '') + '>' + label + '</option>';
   });
@@ -249,19 +258,23 @@ html += '<button class="btn btn-success" id="refresh-btn">Actualizar</button>';
   return html;
 }
 
-function kpiCard(label, value, estado) {
-  var isActive = estado === 'total-archivos' ? state.filterArchivos : state.filterEstado === estado;
+function kpiCard(label, value, estado, span) {
+  var isActive = estado === 'total-archivos' ? state.filterArchivos : estado === 'ref-ex' ? state.filterRefEx : state.filterEstado === estado;
   var colors = {
     pendiente: { bg: 'var(--amber-bg)', border: 'var(--amber)', icon: '&#9888;' },
     espera: { bg: 'var(--coral-bg)', border: 'var(--coral)', icon: '&#8987;' },
     cumplido: { bg: 'var(--green-bg)', border: 'var(--green)', icon: '&#10003;' },
     tomado: { bg: 'var(--indigo-bg)', border: 'var(--indigo)', icon: '&#128203;' },
     firmado: { bg: '#E0F2F1', border: '#00695C', icon: '&#9997;' },
-    'total-archivos': { bg: '#FFF3E0', border: '#E65100', icon: '&#128196;' }
+    finalizado: { bg: '#E8F5E9', border: '#2E7D32', icon: '&#127919;' },
+    en_tramite: { bg: '#FFEBEE', border: '#C62828', icon: '&#128679;' },
+    'total-archivos': { bg: '#FFF3E0', border: '#E65100', icon: '&#128196;' },
+    'ref-ex': { bg: '#FCE4EC', border: '#C62828', icon: '&#128204;' }
   };
   var c = colors[estado] || { bg: 'var(--surface)', border: 'var(--border)', icon: '' };
   var activeStyle = isActive ? 'border:2px solid ' + c.border + ';' : 'border:2px solid transparent;';
-  return '<div class="kpi-card" data-estado="' + estado + '" style="cursor:pointer;' + activeStyle + ' background:' + c.bg + ';"><p class="kpi-label">' + c.icon + ' ' + label + '</p><p class="kpi-value" style="color:' + c.border + ';">' + value + '</p></div>';
+  var spanStyle = span ? 'grid-column: span 2; text-align: center;' : '';
+  return '<div class="kpi-card" data-estado="' + estado + '" style="cursor:pointer;' + activeStyle + spanStyle + ' background:' + c.bg + ';"><p class="kpi-label">' + c.icon + ' ' + label + '</p><p class="kpi-value" style="color:' + c.border + ';">' + value + '</p></div>';
 }
 
 function getSortIcon(column) {
@@ -292,16 +305,19 @@ function tableHtml() {
   rows.forEach(function (n) {
     var st = estadoInfo(n.estado);
     var vence = n.fechaLimite ? '<span class="' + (n.diasVence !== null && n.diasVence <= 5 ? 'vence-danger' : 'vence-normal') + '">' + n.fechaLimite + '</span>' : '<span class="vence-normal">—</span>';
-    var dirBg = n.direccion === 'Salida' ? '#8E24AA' : '#43A047';
-    var dirColor = n.direccion === 'Salida' ? '#fff' : '#fff';
-    var rowBg = n.estado === 'cumplido' ? 'var(--green-bg)' : (n.estado === 'espera' ? 'var(--coral-bg)' : '');
+    var dirBg = n.direccion === 'Salida' ? '#8E24AA' : n.direccion === 'Expediente' ? '#1565C0' : '#43A047';
+    var dirColor = '#fff';
+    var rowBg = n.direccion === 'Expediente' ? '#FFE082' : (n.estado === 'cumplido' ? 'var(--green-bg)' : (n.estado === 'espera' ? 'var(--coral-bg)' : ''));
     var rowStyle = rowBg ? ' style="background:' + rowBg + ';"' : '';
     html += '<tr class="note-row" data-id="' + n.id + '"' + rowStyle + '>';
     html += '<td>' + n.numero + '</td>';
     html += '<td style="color:var(--ink-soft);">' + n.fecha + '</td>';
-    html += '<td><select class="direccion-rapido" data-id="' + n.id + '" style="height:26px; border:1px solid var(--border); border-radius:5px; padding:2px 4px; font-size:11.5px; font-family:inherit; background:' + dirBg + '; color:' + dirColor + ';"><option value="Entrada"' + (n.direccion === 'Entrada' ? ' selected' : '') + '>Entrada</option><option value="Salida"' + (n.direccion === 'Salida' ? ' selected' : '') + '>Salida</option></select></td>';
+    html += '<td><select class="direccion-rapido" data-id="' + n.id + '" style="height:26px; border:1px solid var(--border); border-radius:5px; padding:2px 4px; font-size:11.5px; font-family:inherit; background:' + dirBg + '; color:' + dirColor + ';"><option value="Entrada"' + (n.direccion === 'Entrada' ? ' selected' : '') + '>Entrada</option><option value="Salida"' + (n.direccion === 'Salida' ? ' selected' : '') + '>Salida</option><option value="Expediente"' + (n.direccion === 'Expediente' ? ' selected' : '') + '>Expediente</option></select></td>';
     html += '<td>' + (n.referencia || '') + '</td>';
-    html += '<td><select class="estado-rapido" data-id="' + n.id + '" style="height:26px; border:1px solid var(--border); border-radius:5px; padding:2px 4px; font-size:11.5px; font-family:inherit; background:' + (st.cls === 'badge-pendiente' ? 'var(--amber-bg)' : st.cls === 'badge-espera' ? 'var(--coral-bg)' : st.cls === 'badge-cumplido' ? 'var(--green-bg)' : st.cls === 'badge-firmado' ? '#E0F2F1' : 'var(--indigo-bg)') + '; color:' + (st.cls === 'badge-pendiente' ? 'var(--amber)' : st.cls === 'badge-espera' ? 'var(--coral)' : st.cls === 'badge-cumplido' ? 'var(--green)' : st.cls === 'badge-firmado' ? '#00695C' : 'var(--indigo)') + ';"><option value="pendiente"' + (n.estado === 'pendiente' ? ' selected' : '') + '>Pendiente</option><option value="espera"' + (n.estado === 'espera' ? ' selected' : '') + '>Espera</option><option value="tomado"' + (n.estado === 'tomado' ? ' selected' : '') + '>Tomado</option><option value="cumplido"' + (n.estado === 'cumplido' ? ' selected' : '') + '>Cumplido</option><option value="firmado"' + (n.estado === 'firmado' ? ' selected' : '') + '>Firmado</option></select></td>';
+    var esExp = n.direccion === 'Expediente';
+    var estadosDisp = esExp ? ['tomado', 'finalizado', 'en_tramite'] : ['pendiente', 'espera', 'tomado', 'cumplido', 'firmado'];
+    var opcionesEstado = estadosDisp.map(function(e) { return '<option value="' + e + '"' + (n.estado === e ? ' selected' : '') + '>' + estadoInfo(e).label + '</option>'; }).join('');
+    html += '<td><select class="estado-rapido" data-id="' + n.id + '" style="height:26px; border:1px solid var(--border); border-radius:5px; padding:2px 4px; font-size:11.5px; font-family:inherit; background:' + (st.cls === 'badge-pendiente' ? 'var(--amber-bg)' : st.cls === 'badge-espera' ? 'var(--coral-bg)' : st.cls === 'badge-cumplido' ? 'var(--green-bg)' : st.cls === 'badge-firmado' ? '#E0F2F1' : st.cls === 'badge-finalizado' ? '#E8F5E9' : st.cls === 'badge-en-tramite' ? '#FFEBEE' : 'var(--indigo-bg)') + '; color:' + (st.cls === 'badge-pendiente' ? 'var(--amber)' : st.cls === 'badge-espera' ? 'var(--coral)' : st.cls === 'badge-cumplido' ? 'var(--green)' : st.cls === 'badge-firmado' ? '#00695C' : st.cls === 'badge-finalizado' ? '#2E7D32' : st.cls === 'badge-en-tramite' ? '#C62828' : 'var(--indigo)') + ';">' + opcionesEstado + '</select></td>';
     html += '<td>' + vence + '</td>';
     html += '<td style="color:var(--ink-soft);">' + (n.observaciones || '—') + '</td>';
     html += '</tr>';
@@ -333,8 +349,8 @@ function detailHtml() {
   var st = estadoInfo(n.estado);
   var contestaron = n.destinatarios.filter(function (d) { return d.estado === 'cumplido'; }).length;
 
-  var dirBg = n.direccion === 'Salida' ? '#8E24AA' : '#43A047';
-  var dirColor = n.direccion === 'Salida' ? '#fff' : '#fff';
+  var dirBg = n.direccion === 'Salida' ? '#8E24AA' : n.direccion === 'Expediente' ? '#1565C0' : '#43A047';
+  var dirColor = '#fff';
   var html = '<div style="display:flex; justify-content:space-between; align-items:center;">';
   html += '<div style="display:flex; gap:12px; align-items:center;">';
   html += '<div class="back-link" id="back-btn">&#8592; Volver al listado</div>';
@@ -351,7 +367,10 @@ function detailHtml() {
   html += '</div>';
   html += '</div>';
   html += '<div class="card">';
-  html += '<div class="detail-header"><div><p class="detail-label">Nota Nº</p><input type="text" id="det-numero" value="' + (n.numero || '') + '" style="border:1px solid var(--border); border-radius:6px; padding:6px 10px; font-family:inherit; font-size:17px; font-weight:700; width:320px;"></div><div style="display:flex; gap:8px; align-items:center;"><select id="det-direccion" style="height:30px; border:1px solid var(--border); border-radius:6px; padding:4px 8px; font-family:inherit; font-size:13px; font-weight:600; background:' + dirBg + '; color:' + dirColor + ';"><option value="Entrada"' + (n.direccion === 'Entrada' ? ' selected' : '') + '>Entrada</option><option value="Salida"' + (n.direccion === 'Salida' ? ' selected' : '') + '>Salida</option></select><select id="det-estado" style="height:30px; border:1px solid var(--border); border-radius:6px; padding:4px 8px; font-family:inherit; font-size:13px; font-weight:600; background:' + (st.cls === 'badge-pendiente' ? 'var(--amber-bg)' : st.cls === 'badge-espera' ? 'var(--coral-bg)' : st.cls === 'badge-cumplido' ? 'var(--green-bg)' : st.cls === 'badge-firmado' ? '#E0F2F1' : 'var(--indigo-bg)') + '; color:' + (st.cls === 'badge-pendiente' ? 'var(--amber)' : st.cls === 'badge-espera' ? 'var(--coral)' : st.cls === 'badge-cumplido' ? 'var(--green)' : st.cls === 'badge-firmado' ? '#00695C' : 'var(--indigo)') + ';"><option value="pendiente"' + (n.estado === 'pendiente' ? ' selected' : '') + '>Pendiente</option><option value="espera"' + (n.estado === 'espera' ? ' selected' : '') + '>Espera resp.</option><option value="tomado"' + (n.estado === 'tomado' ? ' selected' : '') + '>Tomado</option><option value="cumplido"' + (n.estado === 'cumplido' ? ' selected' : '') + '>Cumplido</option><option value="firmado"' + (n.estado === 'firmado' ? ' selected' : '') + '>Firmado</option></select></div></div>';
+  var esExp = n.direccion === 'Expediente';
+  var estadosDisp = esExp ? ['tomado', 'finalizado', 'en_tramite'] : ['pendiente', 'espera', 'tomado', 'cumplido', 'firmado'];
+  var opcionesEstado = estadosDisp.map(function(e) { return '<option value="' + e + '"' + (n.estado === e ? ' selected' : '') + '>' + estadoInfo(e).label + '</option>'; }).join('');
+  html += '<div class="detail-header"><div><p class="detail-label">Nota Nº</p><input type="text" id="det-numero" value="' + (n.numero || '') + '" style="border:1px solid var(--border); border-radius:6px; padding:6px 10px; font-family:inherit; font-size:17px; font-weight:700; width:320px;"></div><div style="display:flex; gap:8px; align-items:center;"><select id="det-direccion" style="height:30px; border:1px solid var(--border); border-radius:6px; padding:4px 8px; font-family:inherit; font-size:13px; font-weight:600; background:' + dirBg + '; color:' + dirColor + ';"><option value="Entrada"' + (n.direccion === 'Entrada' ? ' selected' : '') + '>Entrada</option><option value="Salida"' + (n.direccion === 'Salida' ? ' selected' : '') + '>Salida</option><option value="Expediente"' + (n.direccion === 'Expediente' ? ' selected' : '') + '>Expediente</option></select><select id="det-estado" style="height:30px; border:1px solid var(--border); border-radius:6px; padding:4px 8px; font-family:inherit; font-size:13px; font-weight:600; background:' + (st.cls === 'badge-pendiente' ? 'var(--amber-bg)' : st.cls === 'badge-espera' ? 'var(--coral-bg)' : st.cls === 'badge-cumplido' ? 'var(--green-bg)' : st.cls === 'badge-firmado' ? '#E0F2F1' : st.cls === 'badge-finalizado' ? '#E8F5E9' : st.cls === 'badge-en-tramite' ? '#FFEBEE' : 'var(--indigo-bg)') + '; color:' + (st.cls === 'badge-pendiente' ? 'var(--amber)' : st.cls === 'badge-espera' ? 'var(--coral)' : st.cls === 'badge-cumplido' ? 'var(--green)' : st.cls === 'badge-firmado' ? '#00695C' : st.cls === 'badge-finalizado' ? '#2E7D32' : st.cls === 'badge-en-tramite' ? '#C62828' : 'var(--indigo)') + ';">' + opcionesEstado + '</select></div></div>';
   html += '<table class="detail-table">';
   html += '<tr><td>Referencia</td><td><div id="det-referencia" class="ref-readonly" title="Doble clic para editar">' + (n.referencia || '—') + '</div></td></tr>';
   html += '<tr><td>Fecha</td><td><input type="date" id="det-fecha" value="' + dmyToIso(n.fecha) + '" style="border:1px solid var(--border); border-radius:6px; padding:4px 8px; font-family:inherit; font-size:13px;"></td></tr>';
@@ -549,15 +568,23 @@ function bindEvents() {
         var estado = card.getAttribute('data-estado');
         if (estado === 'total-archivos') {
           state.filterArchivos = !state.filterArchivos;
+          state.filterRefEx = false;
           state.filterEstado = 'todos';
           state.filterVenceDias = null;
           document.getElementById('estado-filter').value = 'todos';
-        } else if (state.filterEstado === estado && !state.filterArchivos) {
+        } else if (estado === 'ref-ex') {
+          state.filterRefEx = !state.filterRefEx;
+          state.filterArchivos = false;
+          state.filterEstado = 'todos';
+          state.filterVenceDias = null;
+          document.getElementById('estado-filter').value = 'todos';
+        } else if (state.filterEstado === estado && !state.filterArchivos && !state.filterRefEx) {
           state.filterEstado = 'todos';
           document.getElementById('estado-filter').value = 'todos';
         } else {
           state.filterEstado = estado;
           state.filterArchivos = false;
+          state.filterRefEx = false;
           state.filterVenceDias = null;
           document.getElementById('estado-filter').value = estado;
         }
@@ -767,19 +794,22 @@ function bindEvents() {
       var n = registros.find(function (x) { return x.id === state.selectedId; });
       var nueva = e.target.value;
       n.direccion = nueva;
-      apiPost('actualizarRegistro', { id: n.id, cambios: { Direccion: nueva } }).then(function () {
-        showToast('Dirección actualizada');
-        render();
-      }).catch(function (e) { showToast('Error: ' + e.message); });
+      var esExp = nueva === 'Expediente';
+      var estadosValidos = esExp ? ['tomado', 'finalizado', 'en_tramite'] : ['pendiente', 'espera', 'tomado', 'cumplido', 'firmado'];
+      var cambios = { Direccion: nueva };
+      if (estadosValidos.indexOf(n.estado) === -1) {
+        n.estado = esExp ? 'tomado' : 'pendiente';
+        cambios.Estado = n.estado;
+      }
+      render();
+      apiPost('actualizarRegistro', { id: n.id, cambios: cambios }).catch(function (e) { showToast('Error: ' + e.message); });
     });
     document.getElementById('det-estado').addEventListener('change', function (e) {
       var n = registros.find(function (x) { return x.id === state.selectedId; });
       var nuevoEstado = e.target.value;
       n.estado = nuevoEstado;
-      apiPost('actualizarRegistro', { id: n.id, cambios: { Estado: nuevoEstado } }).then(function () {
-        showToast('Estado actualizado');
-        render();
-      }).catch(function (e) { showToast('Error: ' + e.message); });
+      render();
+      apiPost('actualizarRegistro', { id: n.id, cambios: { Estado: nuevoEstado } }).catch(function (e) { showToast('Error: ' + e.message); });
     });
     document.getElementById('det-numero').addEventListener('blur', function (e) {
       var n = registros.find(function (x) { return x.id === state.selectedId; });
@@ -938,10 +968,15 @@ function bindTableClicks() {
       var nueva = sel.value;
       var n = registros.find(function (x) { return x.id === id; });
       if (n) n.direccion = nueva;
-      apiPost('actualizarRegistro', { id: id, cambios: { Direccion: nueva } }).then(function () {
-        showToast('Dirección actualizada');
-        render();
-      }).catch(function (e) { showToast('Error: ' + e.message); });
+      var esExp = nueva === 'Expediente';
+      var estadosValidos = esExp ? ['tomado', 'finalizado', 'en_tramite'] : ['pendiente', 'espera', 'tomado', 'cumplido', 'firmado'];
+      var cambios = { Direccion: nueva };
+      if (n && estadosValidos.indexOf(n.estado) === -1) {
+        n.estado = esExp ? 'tomado' : 'pendiente';
+        cambios.Estado = n.estado;
+      }
+      render();
+      apiPost('actualizarRegistro', { id: id, cambios: cambios }).catch(function (e) { showToast('Error: ' + e.message); });
     });
   });
   document.querySelectorAll('.estado-rapido').forEach(function (sel) {
@@ -951,10 +986,8 @@ function bindTableClicks() {
       var nuevoEstado = sel.value;
       var n = registros.find(function (x) { return x.id === id; });
       if (n) n.estado = nuevoEstado;
-      apiPost('actualizarRegistro', { id: id, cambios: { Estado: nuevoEstado } }).then(function () {
-        showToast('Estado actualizado');
-        render();
-      }).catch(function (e) { showToast('Error: ' + e.message); });
+      render();
+      apiPost('actualizarRegistro', { id: id, cambios: { Estado: nuevoEstado } }).catch(function (e) { showToast('Error: ' + e.message); });
     });
   });
 }
@@ -1057,6 +1090,13 @@ document.getElementById('add-dest-btn').addEventListener('click', addDestRow);
 document.getElementById('cancel-modal-btn').addEventListener('click', closeModal);
 document.getElementById('f-estado').addEventListener('change', function (e) {
   document.getElementById('f-fechalimite-wrap').style.display = e.target.value === 'espera' ? 'block' : 'none';
+});
+document.getElementById('f-direccion').addEventListener('change', function (e) {
+  var sel = document.getElementById('f-estado');
+  var esExp = e.target.value === 'Expediente';
+  var estados = esExp ? ['tomado', 'finalizado', 'en_tramite'] : ['pendiente', 'espera', 'tomado', 'cumplido', 'firmado'];
+  sel.innerHTML = estados.map(function(est) { return '<option value="' + est + '">' + estadoInfo(est).label + '</option>'; }).join('');
+  document.getElementById('f-fechalimite-wrap').style.display = 'none';
 });
 
 document.getElementById('save-modal-btn').addEventListener('click', async function () {
@@ -1316,7 +1356,7 @@ function fechaHoraExportacion() {
 }
 
 function estadoLabel(estado) {
-  var labels = { pendiente: 'Pendiente', espera: 'Espera resp.', cumplido: 'Cumplido', tomado: 'Tom. conoc.', firmado: 'Firmado' };
+  var labels = { pendiente: 'Pendiente', espera: 'Espera resp.', cumplido: 'Cumplido', tomado: 'Tom. conoc.', firmado: 'Firmado', finalizado: 'Finalizado', en_tramite: 'En trámite' };
   return labels[estado] || estado;
 }
 
