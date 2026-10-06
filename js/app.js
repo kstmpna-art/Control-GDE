@@ -73,9 +73,27 @@ document.getElementById('logout-btn').addEventListener('click', function () {
 function cargarRegistros() {
   if (cargando) return Promise.resolve();
   cargando = true;
+  var ultimoCache = localStorage.getItem('registros_cache');
+  var versionCache = localStorage.getItem('registros_cache_v');
+  var cacheActual = 'v2';
+  if (ultimoCache && versionCache === cacheActual) {
+    try {
+      var datosCache = JSON.parse(ultimoCache);
+      if (Array.isArray(datosCache)) {
+        registros = datosCache;
+        render();
+      }
+    } catch (e) {}
+  } else {
+    mostrarSpinner();
+  }
   return apiGet('getRegistros').then(function (data) {
     if (Array.isArray(data)) {
       registros = data;
+      try {
+        localStorage.setItem('registros_cache', JSON.stringify(data));
+        localStorage.setItem('registros_cache_v', cacheActual);
+      } catch (e) {}
       render();
       detectarYEnviarAlertas();
     } else if (data && data.error) {
@@ -87,7 +105,21 @@ function cargarRegistros() {
     showToast('Error al cargar datos: ' + err.message);
   }).finally(function () {
     cargando = false;
+    ocultarSpinner();
   });
+}
+
+function mostrarSpinner() {
+  if (document.getElementById('loading-spinner')) return;
+  var div = document.createElement('div');
+  div.id = 'loading-spinner';
+  div.innerHTML = '<div class="spinner"></div><p>Cargando registros...</p>';
+  document.body.appendChild(div);
+}
+
+function ocultarSpinner() {
+  var s = document.getElementById('loading-spinner');
+  if (s) s.remove();
 }
 
 function detectarYEnviarAlertas() {
@@ -195,7 +227,13 @@ function listHtml() {
   var alertasRoja = registros.filter(function (n) { return n.estado === 'espera' && n.diasVence !== null && n.diasVence <= 3 && n.diasVence >= 0; });
   var alertasAmarilla = registros.filter(function (n) { return n.estado === 'espera' && n.diasVence !== null && n.diasVence <= 5 && n.diasVence > 3; });
   var counts = { pendiente: 0, espera: 0, cumplido: 0, tomado: 0, firmado: 0, finalizado: 0, en_tramite: 0 };
-  registros.forEach(function (n) { if (counts[n.estado] !== undefined) counts[n.estado]++; });
+  var dirEntrada = 0, dirSalida = 0, dirExpediente = 0;
+  registros.forEach(function (n) {
+    if (counts[n.estado] !== undefined) counts[n.estado]++;
+    if (n.direccion === 'Entrada') dirEntrada++;
+    else if (n.direccion === 'Salida') dirSalida++;
+    else if (n.direccion === 'Expediente') dirExpediente++;
+  });
 
   var html = '';
   if (state.tab === 'panel') {
@@ -215,24 +253,41 @@ function listHtml() {
       html += '<span>' + textoAmarilla + '</span>';
       html += '</div>';
     }
-    html += '<div class="kpi-grid">';
-    html += kpiCard('Pendientes', counts.pendiente, 'pendiente');
-    html += kpiCard('Espera de respuesta', counts.espera, 'espera');
-    html += kpiCard('Cumplidos', counts.cumplido, 'cumplido');
-    html += kpiCard('Tomado conocimiento', counts.tomado, 'tomado');
-    html += kpiCard('Firmados', counts.firmado, 'firmado');
-    var totalEx = registros.filter(function (n) { return n.direccion === 'Expediente'; }).length;
-    html += kpiCard('Expedientes', totalEx, 'ref-ex');
-    html += kpiCard('En trámite', counts.en_tramite, 'en_tramite');
-    html += kpiCard('Finalizados', counts.finalizado, 'finalizado');
-    var totalArchivos = 0;
-    registros.forEach(function (n) {
-      if (n.archivoUrl) totalArchivos++;
-      (n.destinatarios || []).forEach(function (d) { if (d.archivoUrl) totalArchivos++; });
-    });
-    html += kpiCard('Total archivos', totalArchivos, 'total-archivos', true);
+    html += '<div class="panels-grid">';
+
+    html += '<div class="panel-card">';
+    html += '<div class="panel-title">Notas</div>';
+    html += '<div class="panel-items">';
+    html += panelItem('Pendientes', counts.pendiente, 'pendiente');
+    html += panelItem('Espera de Resp.', counts.espera, 'espera');
+    html += panelItem('Entrada', dirEntrada, 'dir-entrada');
+    html += panelItem('Salida', dirSalida, 'dir-salida');
+    html += '</div>';
+    html += '<div class="panel-more">';
+    html += '<button class="panel-hamburger" id="panel-hamburger" title="Más estados">&#9776;</button>';
+    html += '<div class="panel-extra" id="panel-extra" style="display:none;">';
+    html += panelItem('Cumplidos', counts.cumplido, 'cumplido');
+    html += panelItem('Tomado', counts.tomado, 'tomado');
+    html += panelItem('Firmados', counts.firmado, 'firmado');
+    html += '</div></div>';
+    html += '</div>';
+
+    html += '<div class="panel-card">';
+    html += '<div class="panel-title">Expedientes</div>';
+    html += '<div class="panel-items">';
+    html += panelItem('En trámite', counts.en_tramite, 'en_tramite');
+    html += panelItem('Finalizados', counts.finalizado, 'finalizado');
+    html += panelItem('Total Exp.', dirExpediente, 'ref-ex');
+    html += '</div>';
+    html += '</div>';
+
     html += '</div>';
   }
+  var totalArchivos = 0;
+  registros.forEach(function (n) {
+    if (n.archivoUrl) totalArchivos++;
+    (n.destinatarios || []).forEach(function (d) { if (d.archivoUrl) totalArchivos++; });
+  });
   html += '<div class="toolbar">';
   html += '<input type="text" id="search-input" placeholder="Buscar por número, asunto u observaciones" value="' + state.filterText + '">';
   html += '<select id="estado-filter">';
@@ -247,6 +302,7 @@ function listHtml() {
     html += '<button class="btn-primary" id="btn-buscar-fecha" style="padding:0 14px;">Buscar</button>';
     html += '<button class="btn-secondary" id="btn-limpiar-fecha" style="padding:0 14px;">Limpiar</button>';
   }
+  html += '<div class="archivos-counter kpi-card" data-estado="total-archivos" title="Clic para filtrar archivos"><span>&#128196;</span> <strong>' + totalArchivos + '</strong> archivos</div>';
   html += '<button class="btn-primary" id="new-btn">+ Nuevo registro</button>';
 html += '<button class="btn btn-danger" id="export-btn">Exportar</button>';
 html += '<button class="btn btn-success" id="refresh-btn">Actualizar</button>';
@@ -256,6 +312,26 @@ html += '<button class="btn btn-success" id="refresh-btn">Actualizar</button>';
   }
   html += tableHtml();
   return html;
+}
+
+function panelItem(label, value, tipo) {
+  var colors = {
+    pendiente: { bg: 'var(--amber-bg)', border: 'var(--amber)', icon: '&#9888;' },
+    espera: { bg: 'var(--coral-bg)', border: 'var(--coral)', icon: '&#8987;' },
+    cumplido: { bg: 'var(--green-bg)', border: 'var(--green)', icon: '&#10003;' },
+    tomado: { bg: 'var(--indigo-bg)', border: 'var(--indigo)', icon: '&#128203;' },
+    firmado: { bg: '#E0F2F1', border: '#00695C', icon: '&#9997;' },
+    finalizado: { bg: '#E8F5E9', border: '#2E7D32', icon: '&#127919;' },
+    en_tramite: { bg: '#FFEBEE', border: '#C62828', icon: '&#128679;' },
+    'dir-entrada': { bg: '#E8F5E9', border: '#2E7D32', icon: '&#8594;' },
+    'dir-salida': { bg: '#F3E5F5', border: '#7B1FA2', icon: '&#8592;' },
+    'ref-ex': { bg: '#FCE4EC', border: '#C62828', icon: '&#128204;' },
+    'total-archivos': { bg: '#FFF3E0', border: '#E65100', icon: '&#128196;' }
+  };
+  var c = colors[tipo] || { bg: 'var(--surface)', border: 'var(--border)', icon: '' };
+  var isActive = tipo === 'total-archivos' ? state.filterArchivos : tipo === 'ref-ex' ? state.filterRefEx : (tipo === 'dir-entrada' || tipo === 'dir-salida') ? false : state.filterEstado === tipo;
+  var activeStyle = isActive ? 'border:2px solid ' + c.border + ';' : 'border:2px solid transparent;';
+  return '<div class="panel-item kpi-card" data-estado="' + tipo + '" style="cursor:pointer;' + activeStyle + ' background:' + c.bg + ';"><span class="panel-item-icon">' + c.icon + '</span><span class="panel-item-label">' + label + '</span><span class="panel-item-value" style="color:' + c.border + ';">' + value + '</span></div>';
 }
 
 function kpiCard(label, value, estado, span) {
@@ -578,6 +654,8 @@ function bindEvents() {
           state.filterEstado = 'todos';
           state.filterVenceDias = null;
           document.getElementById('estado-filter').value = 'todos';
+        } else if (estado === 'dir-entrada' || estado === 'dir-salida') {
+          return;
         } else if (state.filterEstado === estado && !state.filterArchivos && !state.filterRefEx) {
           state.filterEstado = 'todos';
           document.getElementById('estado-filter').value = 'todos';
@@ -592,6 +670,14 @@ function bindEvents() {
         render();
       });
     });
+    var hamBtn = document.getElementById('panel-hamburger');
+    if (hamBtn) {
+      hamBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var extra = document.getElementById('panel-extra');
+        extra.style.display = extra.style.display === 'none' ? 'grid' : 'none';
+      });
+    }
     document.getElementById('estado-filter').addEventListener('change', function (e) {
       state.filterEstado = e.target.value;
       state.page = 1;
