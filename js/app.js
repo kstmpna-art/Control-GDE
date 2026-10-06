@@ -1,7 +1,7 @@
 var API_URL = 'https://script.google.com/macros/s/AKfycbybL3vV5KrC4diqmmPeqK3ggDpXvfRnNTCHn73Ai9gUynstyiKWs53-XnkyS4OE-zmB/exec';
 var registros = [];
 var cargando = false;
-var state = { view: 'list', tab: 'panel', selectedId: null, previousSelectedId: null, filterText: '', filterEstado: 'todos', filterVenceDias: null, filterArchivos: false, filterRefEx: false, filterFechaDesde: '', filterFechaHasta: '', page: 1, perPage: 20, sortColumn: 'fecha', sortDirection: 'desc' };
+var state = { view: 'list', tab: 'panel', selectedId: null, previousSelectedId: null, filterText: '', filterEstado: 'todos', filterVenceDias: null, filterArchivos: false, filterRefEx: false, filterDireccion: '', filterFechaDesde: '', filterFechaHasta: '', page: 1, perPage: 20, sortColumn: 'fecha', sortDirection: 'desc' };
 
 function showToast(msg) {
   var t = document.getElementById('toast');
@@ -173,6 +173,9 @@ function filteredRegistros() {
     if (state.filterRefEx) {
       if (n.direccion !== 'Expediente') return false;
     }
+    if (state.filterDireccion) {
+      if (n.direccion !== state.filterDireccion) return false;
+    }
     if (state.filterVenceDias) {
       matchEstado = matchEstado && n.estado === 'espera' && n.diasVence !== null && n.diasVence <= state.filterVenceDias && n.diasVence >= 0;
     }
@@ -291,9 +294,16 @@ function listHtml() {
   html += '<div class="toolbar">';
   html += '<input type="text" id="search-input" placeholder="Buscar por número, asunto u observaciones" value="' + state.filterText + '">';
   html += '<select id="estado-filter">';
-  ['todos', 'pendiente', 'espera', 'cumplido', 'tomado', 'firmado', 'finalizado', 'en_tramite'].forEach(function (e) {
-    var label = e === 'todos' ? 'Todos los estados' : estadoInfo(e).label;
-    html += '<option value="' + e + '"' + (state.filterEstado === e ? ' selected' : '') + '>' + label + '</option>';
+  ['todos', 'pendiente', 'espera', 'cumplido', 'tomado', 'firmado', 'finalizado', 'en_tramite', 'dir:Entrada', 'dir:Salida', 'dir:Expediente'].forEach(function (e) {
+    var label, selected;
+    if (e.indexOf('dir:') === 0) {
+      label = e.substring(4);
+      selected = state.filterEstado === 'todos' && state.filterDireccion === e.substring(4) && !state.filterArchivos && !state.filterRefEx;
+    } else {
+      label = e === 'todos' ? 'Todos los estados' : estadoInfo(e).label;
+      selected = state.filterEstado === e;
+    }
+    html += '<option value="' + e + '"' + (selected ? ' selected' : '') + '>' + label + '</option>';
   });
   html += '</select>';
   if (state.tab === 'registros') {
@@ -329,7 +339,7 @@ function panelItem(label, value, tipo) {
     'total-archivos': { bg: '#FFF3E0', border: '#E65100', icon: '&#128196;' }
   };
   var c = colors[tipo] || { bg: 'var(--surface)', border: 'var(--border)', icon: '' };
-  var isActive = tipo === 'total-archivos' ? state.filterArchivos : tipo === 'ref-ex' ? state.filterRefEx : (tipo === 'dir-entrada' || tipo === 'dir-salida') ? false : state.filterEstado === tipo;
+  var isActive = tipo === 'total-archivos' ? state.filterArchivos : tipo === 'ref-ex' ? state.filterRefEx : tipo === 'dir-entrada' ? state.filterDireccion === 'Entrada' : tipo === 'dir-salida' ? state.filterDireccion === 'Salida' : state.filterEstado === tipo;
   var activeStyle = isActive ? 'border:2px solid ' + c.border + ';' : 'border:2px solid transparent;';
   return '<div class="panel-item kpi-card" data-estado="' + tipo + '" style="cursor:pointer;' + activeStyle + ' background:' + c.bg + ';"><span class="panel-item-icon">' + c.icon + '</span><span class="panel-item-label">' + label + '</span><span class="panel-item-value" style="color:' + c.border + ';">' + value + '</span></div>';
 }
@@ -646,16 +656,28 @@ function bindEvents() {
           state.filterArchivos = !state.filterArchivos;
           state.filterRefEx = false;
           state.filterEstado = 'todos';
+          state.filterDireccion = '';
           state.filterVenceDias = null;
           document.getElementById('estado-filter').value = 'todos';
         } else if (estado === 'ref-ex') {
           state.filterRefEx = !state.filterRefEx;
           state.filterArchivos = false;
           state.filterEstado = 'todos';
+          state.filterDireccion = '';
           state.filterVenceDias = null;
           document.getElementById('estado-filter').value = 'todos';
         } else if (estado === 'dir-entrada' || estado === 'dir-salida') {
-          return;
+          var dir = estado === 'dir-entrada' ? 'Entrada' : 'Salida';
+          if (state.filterDireccion === dir) {
+            state.filterDireccion = '';
+          } else {
+            state.filterDireccion = dir;
+          }
+          state.filterEstado = 'todos';
+          state.filterArchivos = false;
+          state.filterRefEx = false;
+          state.filterVenceDias = null;
+          document.getElementById('estado-filter').value = 'todos';
         } else if (state.filterEstado === estado && !state.filterArchivos && !state.filterRefEx) {
           state.filterEstado = 'todos';
           document.getElementById('estado-filter').value = 'todos';
@@ -663,6 +685,7 @@ function bindEvents() {
           state.filterEstado = estado;
           state.filterArchivos = false;
           state.filterRefEx = false;
+          state.filterDireccion = '';
           state.filterVenceDias = null;
           document.getElementById('estado-filter').value = estado;
         }
@@ -679,7 +702,20 @@ function bindEvents() {
       });
     }
     document.getElementById('estado-filter').addEventListener('change', function (e) {
-      state.filterEstado = e.target.value;
+      var val = e.target.value;
+      if (val.indexOf('dir:') === 0) {
+        state.filterDireccion = val.substring(4);
+        state.filterEstado = 'todos';
+        state.filterArchivos = false;
+        state.filterRefEx = false;
+        state.filterVenceDias = null;
+      } else {
+        state.filterEstado = val;
+        state.filterDireccion = '';
+        state.filterArchivos = false;
+        state.filterRefEx = false;
+        state.filterVenceDias = null;
+      }
       state.page = 1;
       render();
     });
